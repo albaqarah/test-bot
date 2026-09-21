@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-tg_notify.py — Notifikasi Telegram utk bot dewa.
-Env: TG_BOT_TOKEN, TG_CHAT_ID  (dikirim tiap: open, exit win/lose, saldo net harian, briefing)
+tg_notify.py v2 - Notifikasi Telegram bot DEWA (gaya keren, ada jam WIB).
 """
 import os, json, urllib.request, urllib.parse
+from datetime import datetime, timezone, timedelta
+
+WIB = timezone(timedelta(hours=7))
 
 def _load_env(path='/home/agentuser/.env'):
     try:
@@ -14,6 +16,9 @@ def _load_env(path='/home/agentuser/.env'):
                 os.environ.setdefault(k.strip(), v.strip())
     except Exception: pass
 _load_env()
+
+def now_wib():
+    return datetime.now(WIB).strftime('%d %b %Y - %H:%M:%S WIB')
 
 def send(text, chat_id=None, token=None):
     tok = token or os.environ.get("TG_BOT_TOKEN", "")
@@ -29,35 +34,64 @@ def send(text, chat_id=None, token=None):
     except Exception:
         return False
 
+def price_of(sym):
+    try:
+        d=json.loads(urllib.request.urlopen(f"https://fapi.binance.com/fapi/v1/ticker/price?symbol={sym}",timeout=8).read())
+        return float(d['price'])
+    except Exception:
+        return None
+
 def fmt_open(e):
-    return (f"🎯 <b>ENTRY {e['side']}</b> {e['symbol']}  [{e.get('grade','?')}]"
-            f"\nEntry: <code>{e['entry']}</code>"
-            f"\nSL: <code>{round(e['sl'],6)}</code> | TP: <code>{round(e['tp'],6)}</code>"
-            f"\n🧠 <b>Bos LLM</b> conf={e.get('conf')}"
-            f"\n💬 \"{e.get('reason','')}\"")
+    px = price_of(e['symbol'])
+    lv = NL + "💰 Harga live: <code>%s</code>" % px if px else ""
+    return ("⚔️ <b>SNIPER FIRING</b> ⚔️"
+        + NL + "━━━━━━━━━━━━━━━━━━"
+        + NL + f"🎯 <b>{e['side']} {e['symbol']}</b> ┃ GRADE <b>{e.get('grade','?')}</b>"
+        + NL + f"💵 Entry: <code>{e['entry']}</code>" + lv
+        + NL + f"🩸 Stop Loss : <code>{round(e['sl'],6)}</code>"
+        + NL + f"💥 Take Profit: <code>{round(e['tp'],6)}</code> (RR 1:3)"
+        + NL + f"⏰ {now_wib()}"
+        + NL + "━━━━━━━━━━━━━━━━━━"
+        + NL + f"🧠 <b>BOS LLM</b> conf: <b>{e.get('conf')}/100</b>"
+        + NL + f"🗣 \"<i>{e.get('reason','')}</i>\"")
 
 def fmt_exit(e, saldo):
     win = e.get('pnl', 0) > 0
-    emoji = "✅ WIN" if win else ("➖ BE" if e.get('hit') in ('BE','TIME') else "❌ LOSE")
-    return (f"{emoji} <b>CLOSE {e.get('hit')}</b> {e['symbol']} ({e.get('side')})"
-            f"\nPnL: <b>${e.get('pnl',0):+.2f}</b>  |  Saldo net (virtual): <b>${saldo:+.2f}</b>"
-            f"\n🧠 Bos conf saat entry: {e.get('conf')}"
-            f"\n💬 \"{e.get('reason','')}\"")
+    if win: head, art = "🏆 <b>WIN</b>", "💎"
+    elif e.get('hit') in ('BE','TIME'): head, art = "⚖️ <b>BREAKEVEN</b>", "🌀"
+    else: head, art = "☠️ <b>LOSE</b>", "🩸"
+    px = price_of(e['symbol'])
+    lv = NL + f"💰 Exit live: <code>{px}</code>" if px else ""
+    return (art + " " + head + f" - {e.get('hit')}"
+        + NL + "━━━━━━━━━━━━━━━━━━"
+        + NL + f"🎯 {e.get('side')} {e['symbol']}" + lv
+        + NL + f"📊 PnL: <b>${e.get('pnl',0):+.2f}</b>"
+        + NL + f"🏦 Saldo net (virtual): <b>${saldo:+.2f}</b>"
+        + NL + f"⏰ {now_wib()}"
+        + NL + "━━━━━━━━━━━━━━━━━━"
+        + NL + f"🧠 Bos conf saat entry: {e.get('conf')}/100"
+        + NL + f"🗣 \"<i>{e.get('reason','')}</i>\"")
 
 def fmt_briefing(rep, open_positions, decisions_sample):
-    lines = [f"🌅 <b>MORNING BRIEFING — Bot DEWA</b>",
-             f"━━━━━━━━━━━━━━━━━━━",
-             f"Sinyal 24 jam: <b>{rep.get('decisions',0)}</b> | Bos acc: <b>{rep.get('accepted',0)}</b>",
-             f"Exit 24 jam: {rep.get('exits',0)} {rep.get('hits',{})}",
-             f"PnL 24 jam: <b>${rep.get('pnl_24h',0):+.2f}</b> (virtual)",
-             f"Posisi terbuka: <b>{len(open_positions)}</b>"]
+    acc = rep.get('accepted',0); dec = rep.get('decisions',0)
+    rate = f"{100*acc/dec:.0f}%" if dec else "-"
+    lines = ["🌅 <b>MORNING BRIEFING - DEWA SNIPER</b> 🌅",
+             f"📅 {now_wib()}",
+             "━━━━━━━━━━━━━━━━━━",
+             f"📡 Sinyal 24 jam: <b>{dec}</b> → Bos acc: <b>{acc}</b> ({rate})",
+             f"⚔️ Exit 24 jam: <b>{rep.get('exits',0)}</b>  {rep.get('hits',{})}",
+             f"💵 PnL 24 jam: <b>${rep.get('pnl_24h',0):+.2f}</b> <i>(virtual)</i>",
+             f"🔓 Posisi terbuka: <b>{len(open_positions)}</b>"]
     for sym, p in list(open_positions.items())[:5]:
-        lines.append(f"  • {sym} {p['side']} conf={p.get('conf')}")
+        lines.append(f"   • {p['side']} {sym} ┃ conf {p.get('conf')}")
     if decisions_sample:
-        lines.append("━━━━━━━━━━━━━━━━━━━")
-        lines.append("🧠 <b>Reasoning bos terakhir:</b>")
+        lines.append("━━━━━━━━━━━━━━━━━━")
+        lines.append("🧠 <b>REASONING BOS TERAKHIR</b>")
         for d in decisions_sample[:3]:
-            lines.append(f"  • {d.get('symbol')} {d.get('side')} → {d.get('decision')} ({d.get('conf')}): \"{d.get('reason','')}\"")
-    lines.append("━━━━━━━━━━━━━━━━━━━")
-    lines.append("⚠️ DRY RUN — virtual, bukan duit beneran")
-    return "\n".join(lines)
+            lines.append(f"  ▪️ {d.get('symbol')} {d.get('side')} → <b>{d.get('decision')}</b> ({d.get('conf')})")
+            lines.append(f"     🗣 \"<i>{d.get('reason','')}</i>\"")
+    lines.append("━━━━━━━━━━━━━━━━━━")
+    lines.append("⚠️ DRY RUN - virtual, bukan duit beneran")
+    return NL.join(lines)
+
+NL = chr(10)
