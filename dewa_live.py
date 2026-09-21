@@ -30,6 +30,8 @@ btf=importlib.util.module_from_spec(spec2); spec2.loader.exec_module(btf)
 import reversion_bot as rb
 import dewa_skill as ds
 import order_guard as og
+import tg_notify as tg
+import order_cleanup as oc
 
 og.MAX_GLOBAL_POSITIONS=5
 
@@ -133,12 +135,31 @@ def manage_open(st, k_cache):
                 realized.append({'sym':sym,'hit':hit,'pnl':round(pnl,2),'bars':round(bars_open,1),
                                  'conf':p.get('conf'),'grade':p.get('grade'),'side':side})
                 log({'event':'exit','symbol':sym,'hit':hit,'pnl':pnl,'conf':p.get('conf')})
+                st['saldo']=round(st.get('saldo',0)+pnl,2)
+                # poin 4: pastikan ga ada SL/TP nyantol setelah close
+                oc.cleanup_leftovers(sym, live=og.API_KEY and og.API_SECRET and LIVE)
+                # poin 2: notifikasi Telegram (win/lose + saldo net + reasoning)
+                reason=last_reason(sym, st)
+                tg.send(tg.fmt_exit({'symbol':sym,'side':p.get('side'),'hit':hit,
+                                     'pnl':pnl,'conf':p.get('conf'),'reason':reason},
+                                    st['saldo']))
                 del st['open'][sym]
             else:
                 st['open'][sym]=p
         except Exception as e:
             log({'event':'err','symbol':sym,'msg':str(e)[:80]})
     return realized
+
+def last_reason(sym, st):
+    """Ambil reasoning bos terakhir utk symbol dari log."""
+    try:
+        with open(LOG) as f:
+            for line in reversed(f.readlines()[-200:]):
+                e=json.loads(line)
+                if e.get('event')=='decision' and e.get('symbol')==sym:
+                    return e.get('reason','')
+    except Exception: pass
+    return ''
 
 def iterate(once=False):
     st=load_state()
@@ -201,13 +222,17 @@ def iterate(once=False):
                                'open_ts':int(time.time()*1000),'conf':d.get('confidence'),
                                'grade':cd['grade']}
         confirmed+=1
+        reason=d.get('reason','') or d.get('key_factor','')
         log({'event':'open','symbol':cd['sym'],'side':side,'entry':entry,'sl':sl,'tp':tp,
-             'conf':d.get('confidence'),'grade':cd['grade']})
+             'conf':d.get('confidence'),'grade':cd['grade'],'reason':reason})
+        tg.send(tg.fmt_open({'symbol':cd['sym'],'side':side,'grade':cd['grade'],
+                             'entry':entry,'sl':sl,'tp':tp,
+                             'conf':d.get('confidence'),'reason':reason}))
     save_state(st)
     return {'realized':realized,'candidates':len(candidates),'confirmed':confirmed,
             'open_now':len(st['open'])}
 
-def report_daily():
+def report_daily(send_tg=False):
     """Untuk cron: ringkasan 24 jam terakhir dari log."""
     import json as _j
     dayAgo=time.time()*1000-86400000
@@ -227,9 +252,20 @@ def report_daily():
         elif e['event']=='open': open_+=1
         elif e['event']=='exit':
             ex+=1; pnl+=e.get('pnl',0); hits[e['hit']]=hits.get(e['hit'],0)+1
-    return {'decisions':dec,'accepted':accepted,'open':open_,'exits':ex,
-            'pnl_24h':round(pnl,2),'hits':hits,
-            'avg_conf':round(sum(confs)/len(confs),1) if confs else 0}
+    rep={'decisions':dec,'accepted':accepted,'open':open_,'exits':ex,
+         'pnl_24h':round(pnl,2),'hits':hits,
+         'avg_conf':round(sum(confs)/len(confs),1) if confs else 0}
+    if send_tg:
+        st=load_state()
+        # sample reasoning terakhir utk briefing
+        sample=[]
+        try:
+            for line in reversed(open(LOG).readlines()[-100:]):
+                e=json.loads(line)
+                if e.get('event')=='decision' and len(sample)<3: sample.append(e)
+        except Exception: pass
+        tg.send(tg.fmt_briefing(rep, st.get('open',{}), sample))
+    return rep
 
 if __name__=='__main__':
     ap=argparse.ArgumentParser()
@@ -240,7 +276,7 @@ if __name__=='__main__':
     a=ap.parse_args()
     if a.live: LIVE=True
     if a.report:
-        print(json.dumps(report_daily(),indent=1))
+        print(json.dumps(report_daily(send_tg=True),indent=1))
     elif a.once:
         print(json.dumps(iterate(once=True),indent=1))
     else:
