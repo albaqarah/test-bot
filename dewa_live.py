@@ -23,6 +23,16 @@ Usage: python3 dewa_live.py --pairs ALL --once   (1 iterasi, untuk cron)
 import importlib.util, json, os, sys, time, argparse, subprocess
 from datetime import datetime, timezone
 
+def _load_env(path='/home/agentuser/.env'):
+    try:
+        for line in open(path):
+            line=line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                k,v=line.split('=',1)
+                os.environ.setdefault(k.strip(), v.strip())
+    except Exception: pass
+_load_env()
+
 spec=importlib.util.spec_from_file_location('vg','/home/agentuser/v15_grade.py')
 vg=importlib.util.module_from_spec(spec); spec.loader.exec_module(vg)
 spec2=importlib.util.spec_from_file_location('btf','/home/agentuser/backtest_v15x_final.py')

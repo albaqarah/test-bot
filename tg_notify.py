@@ -5,6 +5,16 @@ Env: TG_BOT_TOKEN, TG_CHAT_ID  (dikirim tiap: open, exit win/lose, saldo net har
 """
 import os, json, urllib.request, urllib.parse
 
+def _load_env(path='/home/agentuser/.env'):
+    try:
+        for line in open(path):
+            line=line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                k,v=line.split('=',1)
+                os.environ.setdefault(k.strip(), v.strip())
+    except Exception: pass
+_load_env()
+
 def send(text, chat_id=None, token=None):
     tok = token or os.environ.get("TG_BOT_TOKEN", "")
     cid = chat_id or os.environ.get("TG_CHAT_ID", "")
