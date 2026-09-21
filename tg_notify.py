@@ -41,13 +41,16 @@ def price_of(sym):
     except Exception:
         return None
 
+SIDE = {"L":"LONG","S":"SHORT","LONG":"LONG","SHORT":"SHORT"}
+
 def fmt_open(e):
     px = price_of(e['symbol'])
     lv = NL + "💰 Harga live: <code>%s</code>" % px if px else ""
     return ("⚔️ <b>SNIPER FIRING</b> ⚔️"
         + NL + "━━━━━━━━━━━━━━━━━━"
-        + NL + f"🎯 <b>{e['side']} {e['symbol']}</b> ┃ GRADE <b>{e.get('grade','?')}</b>"
+        + NL + f"🎯 <b>{SIDE.get(e['side'],e['side'])} {e['symbol']}</b> ┃ GRADE <b>{e.get('grade','?')}</b>"
         + NL + f"💵 Entry: <code>{e['entry']}</code>" + lv
+        + NL + "💸 Margin $2 × 10x (notional $20)"
         + NL + f"🩸 Stop Loss : <code>{round(e['sl'],6)}</code>"
         + NL + f"💥 Take Profit: <code>{round(e['tp'],6)}</code> (RR 1:3)"
         + NL + f"⏰ {now_wib()}"
@@ -64,7 +67,8 @@ def fmt_exit(e, saldo):
     lv = NL + f"💰 Exit live: <code>{px}</code>" if px else ""
     return (art + " " + head + f" - {e.get('hit')}"
         + NL + "━━━━━━━━━━━━━━━━━━"
-        + NL + f"🎯 {e.get('side')} {e['symbol']}" + lv
+        + NL + f"🎯 {SIDE.get(e.get('side'),e.get('side'))} {e['symbol']}" + lv
+        + NL + "💸 Margin $2 × 10x"
         + NL + f"📊 PnL: <b>${e.get('pnl',0):+.2f}</b>"
         + NL + f"🏦 Saldo net (virtual): <b>${saldo:+.2f}</b>"
         + NL + f"⏰ {now_wib()}"

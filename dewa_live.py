@@ -282,11 +282,17 @@ if __name__=='__main__':
     ap.add_argument('--pairs',default='ALL')
     ap.add_argument('--once',action='store_true')
     ap.add_argument('--report',action='store_true')
+    ap.add_argument('--watch',action='store_true')
     ap.add_argument('--live',action='store_true')
     a=ap.parse_args()
     if a.live: LIVE=True
     if a.report:
         print(json.dumps(report_daily(send_tg=True),indent=1))
+    elif a.watch:
+        st=load_state(); k_cache={}
+        rl=manage_open(st,k_cache)
+        save_state(st)
+        print(json.dumps({'watch':1,'realized':rl,'open':len(st['open'])}))
     elif a.once:
         print(json.dumps(iterate(once=True),indent=1))
     else:
