@@ -1,0 +1,8 @@
+.env
+dewa_live_log.jsonl
+dewa_live_state.json
+dewa_cron.log
+*_results.json
+*_out.txt
+__pycache__/
+node_modules/
