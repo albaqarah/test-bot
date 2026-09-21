@@ -42,6 +42,7 @@ import dewa_skill as ds
 import order_guard as og
 import tg_notify as tg
 import order_cleanup as oc
+import hybrid_rules as hr
 
 og.MAX_GLOBAL_POSITIONS=5
 
@@ -104,14 +105,22 @@ def llm_call(brief):
                     {"role":"user","content":json.dumps(brief)}]}).encode()
     req=urllib.request.Request(base.rstrip('/')+"/chat/completions",data=body,
         headers={"Authorization":f"Bearer {key}","Content-Type":"application/json"})
-    try:
-        with urllib.request.urlopen(req,timeout=45) as r:
-            msg=json.loads(r.read())["choices"][0]["message"]
-        txt=msg.get("content") or msg.get("reasoning_content") or ""
-        txt=txt[txt.find("{"):txt.rfind("}")+1]
-        return json.loads(txt)
-    except Exception as e:
-        return {"decision":"REJECT","confidence":0,"reason":f"llm_err:{str(e)[:60]}"}
+    last_err='unknown'
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(req,timeout=45) as r:
+                msg=json.loads(r.read())["choices"][0]["message"]
+            txt=(msg.get("content") or "").strip()
+            if not txt:
+                txt=(msg.get("reasoning_content") or "").strip()
+            i,j=txt.find("{"),txt.rfind("}")
+            if i<0 or j<=i:
+                raise ValueError("no_json_in_response")
+            return json.loads(txt[i:j+1])
+        except Exception as ex:
+            last_err=str(ex)[:50]
+            time.sleep(5*(attempt+1))  # backoff: gateway kadang blm siap
+    return {"decision":"REJECT","confidence":0,"reason":f"llm_err_x3:{last_err}"}
 
 def manage_open(st, k_cache):
     """Update posisi virtual: BE-shift, SL/TP hit, max-hold. Return realized pnl list."""
@@ -188,11 +197,16 @@ def iterate(once=False):
             rs=rb.rsi(c); zz=rb.zscore(c)
             vsma=[0.0]*len(v)
             for i in range(20,len(v)): vsma[i]=sum(v[i-20:i])/20
-            # sinyal di 3 bar terakhir (realtime; kurir dihitung sekali per iterasi)
-            sigs=rb.gen_signals(kk,rs,zz,vsma)
-            for (si,side,grade) in sigs[-3:] if sigs else []:
+            # mode HYBRID: fade + trend pullback (LLM gate tetap)
+            maps=hr.build_htf_maps(sym,len(kk))
+            htf15=[maps['15m'].get(kk[i][0]) for i in range(len(kk))]
+            htf60=[maps['1h'].get(kk[i][0]) for i in range(len(kk))]
+            sigs=hr.gen_hybrid(kk,rs,zz,vsma,htf15,htf60)
+            # setor semua sinyal BARU sejak iterasi terakhir (dedup via last_seen ts)
+            cutoff=st.get('last_seen',{}).get(sym,0)
+            for (si,side,grade) in sigs:
                 i=si
-                if i>=len(kk)-3:
+                if kk[i][0]>cutoff and i>=len(kk)-24:
                     if sym in st['open']: continue
                     o,h,l,cl=(kk[i][j] for j in (1,2,3,4))
                     rng=h-l
@@ -207,6 +221,7 @@ def iterate(once=False):
                                        'brief':brief,'entry_next':float(kk[i+1][1]) if i+1<len(kk) else None})
         except Exception as e:
             log({'event':'err','symbol':sym,'msg':str(e)[:80]})
+        st.setdefault('last_seen',{})[sym]=kk[-1][0]
     # 3) bos putuskan (batch, urut grade A dulu)
     candidates.sort(key=lambda x:(x['grade']!='A', x['sym']))
     confirmed=0
@@ -225,7 +240,7 @@ def iterate(once=False):
         entry=cd['entry_next']
         if entry is None: continue
         side=cd['side']
-        sl_d=max(SL_MIN,entry*0.004); tp_d=sl_d*3.0
+        sl_d=entry*0.004; tp_d=sl_d*3.0  # SL 0.4% dari harga (proporsional semua coin)
         sl=entry-sl_d if side=='LONG' else entry+sl_d
         tp=entry+tp_d if side=='LONG' else entry-tp_d
         st['open'][cd['sym']]={'side':side,'entry':entry,'sl':sl,'tp':tp,'be_moved':False,
