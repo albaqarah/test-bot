@@ -28,6 +28,16 @@ Sebuah ekstrem layak difade (beli lembah / jual pucuk) hanya jika SEMUA ini terl
    uptrend) = setup premium. Lembah 5m melawan downtrend 1h yang masih kencang
    = hanya boleh jika climax-nya SANGAT ekstrem (z>2, volume>2x, wick besar).
 
+== MODE CHOP SNIPER (regime == "RANGE") ==
+RANGE = pasar bolak-balik tanpa arah = DUNIA SNIPER. Data backtest: regime ini
+paling stabil (near-breakeven OOS) untuk scalping climax. Aturannya berbeda:
+- WAJIB grade A (climax ekstrem: vol_x > 1.5 + wick besar) — grade B di RANGE = REJECT.
+- Dua arah sah (fade pucuk & beli lembah) TANPA perlu searah 1h.
+- Exit CEPAT: TP 2:1 (bukan 3:1) — di chop, reversal balik ke mean itu cepat;
+  mengincar 3R di pasar tanpa arah = berharap trend yang gak akan datang.
+- Hold pendek: kalau 8 jam gak sampai TP, itu setup gagal (TIME exit).
+- Volume climax tetap WAJIB (vol_x >= 1.5): chop tanpa volume = noise murni.
+
 == ATURAN MATI (AUTO-REJECT, tidak bisa dinego) ==
 - Grade C: TOLAK (tidak akan pernah kamu terima — kurir tidak menyetor).
 - volume DRY di ekstrem (vol_x < 1.0): TOLAK — tanpa climax tidak ada trapped traders.

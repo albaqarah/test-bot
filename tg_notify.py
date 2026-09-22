@@ -25,14 +25,18 @@ def send(text, chat_id=None, token=None):
     cid = chat_id or os.environ.get("TG_CHAT_ID", "")
     if not tok or not cid:
         return False
-    try:
-        data = urllib.parse.urlencode({"chat_id": cid, "text": text,
-                                       "parse_mode": "HTML"}).encode()
-        req = urllib.request.Request(f"https://api.telegram.org/bot{tok}/sendMessage", data=data)
-        with urllib.request.urlopen(req, timeout=15) as r:
-            return json.loads(r.read()).get("ok", False)
-    except Exception:
-        return False
+    for attempt in range(3):
+        try:
+            data = urllib.parse.urlencode({"chat_id": cid, "text": text,
+                                           "parse_mode": "HTML"}).encode()
+            req = urllib.request.Request(f"https://api.telegram.org/bot{tok}/sendMessage", data=data)
+            with urllib.request.urlopen(req, timeout=15) as r:
+                return json.loads(r.read()).get("ok", False)
+        except Exception as e:
+            import sys, time as _t
+            print(f"[tg] send fail #{attempt+1}: {e!r}", file=sys.stderr, flush=True)
+            _t.sleep(2*(attempt+1))
+    return False
 
 def price_of(sym):
     try:
@@ -52,7 +56,7 @@ def fmt_open(e):
         + NL + f"💵 Entry: <code>{e['entry']}</code>" + lv
         + NL + "💸 Margin $2 × 10x (notional $20)"
         + NL + f"🩸 Stop Loss : <code>{round(e['sl'],6)}</code>"
-        + NL + f"💥 Take Profit: <code>{round(e['tp'],6)}</code> (RR 1:3)"
+        + NL + f"💥 Take Profit: <code>{round(e['tp'],6)}</code> (RR 1:{e.get('tp_rr',3):g}{', MODE CHOP SNIPER' if e.get('tp_rr')==2.0 else ''})"
         + NL + f"⏰ {now_wib()}"
         + NL + "━━━━━━━━━━━━━━━━━━"
         + NL + f"🧠 <b>BOS LLM</b> conf: <b>{e.get('conf')}/100</b>"

@@ -5,7 +5,29 @@ Bot trading futures Binance TF 5m: **algoritma matematika = kurir** sinyal grade
 (eksekusi virtual, tanpa API key Binance, tanpa risiko duit).
 
 Fitur: notifikasi Telegram per entry/exit (win/lose + saldo net + reasoning bos LLM),
-cleanup otomatis SL/TP nyantol, morning briefing harian.
+cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
+**switch MODE dry/live**, **auto-restart supervisor**, anti-hang & anti-race.
+
+---
+
+## CHANGELOG PATCH v5 (22 Sep 2026)
+
+| Patch | Isi |
+|---|---|
+| **MODE dry/live via .env** | `MODE=dry` ↔ `MODE=live` di `.env` + restart = ganti mode. LIVE = market order beneran + SL/TP conditional nyata + janitor. Fallback aman: MODE=live tanpa API key → auto-DRY + warning `[SAFETY]` |
+| **Panel tuning .env** | Semua parameter kunci dibaca dari .env: MARGIN_USD, LEVERAGE, SL_PCT, TP_RR_TREND, TP_RR_CHOP, BE_TRIG, BE_OFF, MAXHOLD_TREND/CHOP, COOLDOWN_MIN, SCAN_SEC. Ubah angka → restart → berlaku. Gak perlu sentuh kode |
+| **CHOP SNIPER MODE** | Regime RANGE = TP 1:3 (RR dinamis per regime), MAXHOLD 96 bar (8 jam), grade A wajib. TREND = TP 1:4, hold 40 jam. Regime disimpan di posisi + tampil di notif |
+| **SL anti-wick** | SL proporsional dari entry (kini 1.2%, riwayat: 0.4% → 0.8% → 1.2%). Coin sub-cent gak lagi dapet SL mustahil (GALA 167% bug fixed) |
+| **File-lock anti-race** | `fcntl` lock: cuma 1 proses boleh mutasi state. Watchdog/cron jadi fallback-only (`skipped: locked_by_other_process`) |
+| **Done-set dedup** | Kandidat unik per (pair, bar, side) — zombie repeat 17-40× fixed |
+| **Cooldown 30 menit/pair** | Anti re-entry langsung setelah exit (config: COOLDOWN_MIN) |
+| **Anti-hang lengkap** | Timeout 8s semua fetch + kill-switch timer (exit 99) + `dewa_supervisor.sh` auto-restart 5s. Postmortem: fundingRate urlopen tanpa timeout = TCP nyangkut 7 jam |
+| **LLM anti-reasoning-burn** | Instruksi "langsung JSON" — reasoning model gak lagi makan max_tokens buat thinking (no_json_in_response massal fixed); retry 2× + backoff |
+| **save_state per keputusan** | Kill di tengah iterasi gak lagi bikin keputusan hilang/diulang |
+| **tg.send retry 3×** | Notif gak hilang senyap (kasus TRX SL tanpa notif); kegagalan dicatat |
+| **last_reason dari CONFIRMED** | Notif exit nunjukin reasoning bos saat entry (bukan reject terakhir / llm_err) |
+| **Startup notif + echo config** | "🤖 BOT ONLINE" tiap restart + baris config aktif: SL/TP/margin/BE — anti silent-drift |
+| **BE-shift (breakeven)** | Profit ≥ 0.1% → SL digeser ke entry+0.06% (nutup fee). Selalu aktif tiap iterasi |
 
 ---
 
@@ -46,38 +68,51 @@ cd tvapi && npm install
 cp .env.example .env
 nano .env
 ```
-Isi:
 ```bash
-LLM_BASE_URL=https://<gateway-openai-compatible>/v1   # endpoint OpenAI-compatible
+# [KONEKSI]
+LLM_BASE_URL=https://<gateway-openai-compatible>/v1
 LLM_API_KEY=<key gateway lo>
 LLM_MODEL=auto
 
-# Telegram notifikasi (WAJIB utk notif & briefing):
-TG_BOT_TOKEN=<token dari BotFather>
+# Telegram notif (WAJIB):
+TG_BOT_TOKEN=<token BotFather>
 TG_CHAT_ID=<chat id lo>
 
-# Hanya untuk mode --live:
+# Binance — kosong = DRY RUN. Isi + MODE=live = order beneran:
 BINANCE_API_KEY=
 BINANCE_API_SECRET=
+MODE=dry            # 'live' = eksekusi nyata (butuh key Binance)
+
+# ===== TUNING BOT (ubah angka → restart) =====
+MARGIN_USD=2          # margin per posisi ($)
+LEVERAGE=10           # leverage
+SL_PCT=0.012          # SL = 1.2% dari entry (anti-wick)
+TP_RR_TREND=4.0       # TP 1:4 saat regime TREND
+TP_RR_CHOP=3.0        # TP 1:3 saat regime RANGE/chop
+BE_TRIG=0.0010        # shift BE kalau profit ≥ 0.1%
+BE_OFF=0.0006         # BE = entry ± 0.06% (nutup fee)
+MAXHOLD_TREND=480     # max hold trend (480 bar = 40 jam)
+MAXHOLD_CHOP=96       # max hold chop (96 bar = 8 jam)
+COOLDOWN_MIN=30       # anti re-entry pair baru exit (menit)
+SCAN_SEC=60           # jeda antar scan idle (detik)
 ```
+> ⚠️ Jangan taruh komentar di belakang angka? Boleh — parser nge-strip `#` otomatis.
 
 ### 5. Tes cepat (dry run 1 iterasi)
 ```bash
-set -a; source .env; set +a
 python3 dewa_live.py --once
 ```
 Output sukses: JSON `{"realized": [...], "candidates": N, "confirmed": N, "open_now": N}`.
-Kalau lo coba sambil ada sinyal & Telegram aktif → notif entry masuk ke chat lo.
+Kalau sinyal muncul & Telegram aktif → notif entry masuk.
 
-### 6. Jalankan dry run terus-menerus
+### 6. Jalankan produksi (supervisor auto-restart)
 ```bash
-# Loop scan tiap 60 detik:
-set -a; source .env; set +a
-nohup python3 dewa_live.py > dewa_run.log 2>&1 &
-
-# Cek posisi/log:
-tail -f dewa_live_log.jsonl
+setsid nohup ./dewa_supervisor.sh > /dev/null 2>&1 &
+# supervisor: while-true, restart 5 detik setelah proses mati/hang (kill-switch exit 99)
+# cek:
+tail -f dewa_loop.log dewa_supervisor.log
 ```
+Alternatif manual: `nohup python3 dewa_live.py > dewa_run.log 2>&1 &`
 
 ### 7. Morning briefing otomatis (07:00 WIB)
 ```bash
@@ -87,14 +122,17 @@ crontab -e
 ```
 (23:00 UTC = 07:00 WIB. `--report` mengirim briefing ke Telegram + stdout.)
 
-### 8. (Nanti, kalau yakin) Mode LIVE
-1. Binance → API Management → Create API → **enable Futures**, **JANGAN enable Withdraw**,
-   batasi IP ke server lo.
-2. Isi `BINANCE_API_KEY` & `BINANCE_API_SECRET` di `.env`.
-3. `python3 dewa_live.py --live`
-4. SL/TP dipasang sebagai conditional closePosition orders + **janitor** memverifikasi
-   tiap 5 detik dan memasang ulang bila gagal/rate-limited. Setelah close, leftover
-   orders dibersihkan & diverifikasi (`order_cleanup.py`).
+### 8. Ganti mode DRY ↔ LIVE
+```bash
+nano .env        # MODE=dry → MODE=live (dan isi key Binance)
+pkill -f dewa_live.py   # supervisor auto-restart dgn config baru
+```
+- LIVE: entry = market order nyata, SL/TP = conditional closePosition orders nyata
+- **Janitor** verifikasi tiap 5 detik + pasang ulang bila gagal/rate-limited
+  (SL/TP TIDAK dibiarkan kosong — dikejar sampai terverifikasi terpasang)
+- Setelah close, leftover orders dibersihkan (`order_cleanup.py`)
+- Fallback aman: MODE=live tanpa API key → bot tetap hidup sebagai DRY + `[SAFETY]` warning
+- Notif LIVE ditandai 🟢 MODE LIVE
 
 ---
 
@@ -108,28 +146,34 @@ Data (Binance klines 5m/1h + funding + TradingView multi-TF)
       Grade C dibuang — tidak pernah sampai ke LLM
   → BRIEFING JSON ke LLM bos (skill: climax vs drift, absorption wick,
       anti-falling-knife, funding=map kerumunan, konfluensi 5m/15m/1h,
-      aturan mati: volume kering/funding searah ekstrem/ragu = REJECT)
-  → RISK: max 5 posisi global, 1 posisi/pair
-  → EKSEKUSI: entry open candle berikutnya, margin $2, lev 10x,
-      SL max(0.35%, 0.4%), TP = 3×SL (RR 3:1), BE-shift +0.1% → entry+0.06%,
-      max hold 480 bar
+      aturan mati: volume kering/funding searah ekstrem/ragu = REJECT;
+      CHOP SNIPER: regime RANGE = climax dua arah, grade A wajib)
+  → RISK: max 5 posisi global, 1 posisi/pair, cooldown 30 menit/pair,
+      file-lock single-writer (anti race condition multi-proses)
+  → EKSEKUSI: entry open candle berikutnya, margin $2, lev 10x (semua via .env),
+      SL = 1.2% entry (anti-wick), TP = RR dinamis (1:4 trend / 1:3 chop),
+      BE-shift +0.1% → entry±0.06%, max hold 40 jam (trend) / 8 jam (chop)
   → JANITOR: verifikasi SL/TP tiap 5 detik (live), cleanup setelah close
-  → TELEGRAM: notif entry/exit (dengan reasoning bos), briefing pagi
+  → TELEGRAM: notif entry/exit (reasoning bos saat entry), briefing pagi,
+      startup "BOT ONLINE" + echo config aktif
+  → RESILIENCE: fetch timeout 8s, kill-switch timer exit 99, supervisor
+      auto-restart 5s, save_state per keputusan, tg.send retry 3×
 ```
 
 ## FILE
 
 | File | Peran |
 |---|---|
-| `dewa_live.py` | Mesin utama live/dry-run + report + briefing |
-| `dewa_skill.py` | System prompt skill dewa (inject ke bos LLM) |
-| `dewa_dryrun.py` | Dry run replay historis (LLM beneran dipanggil) |
-| `order_guard.py` | Janitor SL/TP + max posisi global |
+| `dewa_live.py` | Mesin utama live/dry-run + panel tuning loader + report + briefing |
+| `dewa_skill.py` | System prompt skill dewa (inject ke bos LLM) + instruksi CHOP SNIPER |
+| `order_guard.py` | Janitor SL/TP + max posisi global + eksekusi order LIVE |
 | `order_cleanup.py` | Bersihkan SL/TP nyantol setelah posisi close |
-| `tg_notify.py` | Notifikasi Telegram (entry/exit/briefing) |
+| `tg_notify.py` | Notifikasi Telegram (entry/exit/briefing, RR dinamis, label CHOP/TREND) |
 | `reversion_bot.py` | Kurir: indikator + generator sinyal fade-ekstrem |
-| `reversion_dewa.py` | Backtest regime-adaptif (trend/chop sniper) |
-| `dewa_v3.py` | Backtest final: max 5 posisi, laporan per minggu/hari |
+| `hybrid_rules.py` | Kurir hybrid: fade-ekstrem + trend pullback |
+| `dewa_supervisor.sh` | Auto-restart loop (while-true, 5 detik) |
+| `position_watchdog.sh` | Watchdog SL/TP fallback-only (respect file-lock) |
+| `dewa_dryrun.py` | Dry run replay historis (LLM beneran dipanggil) |
 | `tv_bridge.js` | Bridge TradingView (EMA/RSI multi-TF; metals via OANDA) |
 
 ## HASIL BACKTEST (jujur)
@@ -137,7 +181,13 @@ Data (Binance klines 5m/1h + funding + TradingView multi-TF)
 9 engine, ~60.000 trade simulasi, IS/OOS terpisah, fee taker 0.05%/sisi ×10x:
 - V15 StochRSI cross original: **-$70.50** (3.825 trades)
 - Fade-ekstrem + rulebook ketat (engine ini): **-$0.67** (349 trades) — dekat breakeven
-- **Tidak ada klaim profit.** Dry run 2 minggu adalah ujian sebenarnya.
+- **Tidak ada klaim profit.** Dry run adalah ujian sebenarnya.
+
+## HASIL DRY RUN LIVE (ledger resmi, per 22 Sep 2026)
+
+- Day-2 hybrid+LLM: **+$0.46** (3W/1L: WLD/ORDI/SUI TP, TRX SL)
+- UNIUSDT SHORT grade B: **+$0.22** (conf 74, climax z5.2 vol2.5x RSI90, TP 6 detik)
+- Acc rate bos LLM ~43%; kandidat kurir ~0.4-1% candle — idle itu normal
 
 ## DISCLAIMER
 

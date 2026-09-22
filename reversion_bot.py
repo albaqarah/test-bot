@@ -86,12 +86,12 @@ def gen_signals(kk, rs, zz, vsma):
         imb=((min(o[i],c[i])-l[i])-(h[i]-max(o[i],c[i])))/rng
         volx=v[i]/vsma[i] if vsma[i] else 1
         # LONG: lembah
-        if r<25 and z<-1.5 and imb<=-0.25:
-            grade='A' if (volx>1.5 and imb<=-0.4) else 'B'
+        if r<25 and z<-1.5 and imb<=-0.15:
+            grade='A' if (volx>1.5 and imb<=-0.3) else 'B'
             sigs.append((i,'L',grade))
         # SHORT: pucuk
-        elif r>75 and z>1.5 and imb>=0.25:
-            grade='A' if (volx>1.5 and imb>=0.4) else 'B'
+        elif r>75 and z>1.5 and imb>=0.15:
+            grade='A' if (volx>1.5 and imb>=0.3) else 'B'
             sigs.append((i,'S',grade))
     return sigs
 
