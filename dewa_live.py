@@ -64,6 +64,7 @@ MAXHOLD=_cfg('MAXHOLD_TREND',480,int)   # max hold bar 5m utk trend (480=40 jam)
 MAXHOLD_CHOP=_cfg('MAXHOLD_CHOP',96,int)# max hold utk chop (96=8 jam)
 COOLDOWN_MIN=_cfg('COOLDOWN_MIN',30,int)# re-entry cooldown per pair (menit)
 SCAN_SEC=_cfg('SCAN_SEC',60,int)        # jeda antar scan (detik) saat idle
+P6_LOOSE=os.environ.get('P6_LOOSE','off').strip().lower() in ('on','1','true','yes')  # P6 fade longgar (rollback: off)
 COOLDOWN_MS=COOLDOWN_MIN*60*1000
 LIVE=os.environ.get('MODE','dry').strip().lower()=='live'   # MODE=live di .env -> eksekusi nyata
 
@@ -281,10 +282,14 @@ def _iterate_inner(once=False):
             maps=hr.build_htf_maps(sym,len(kk))
             htf15=[maps['15m'].get(kk[i][0]) for i in range(len(kk))]
             htf60=[maps['1h'].get(kk[i][0]) for i in range(len(kk))]
-            sigs=hr.gen_hybrid(kk,rs,zz,vsma,htf15,htf60)
+            sigs=hr.gen_hybrid(kk,rs,zz,vsma,htf15,htf60,
+                               extra_engines='all' if P6_LOOSE else 'scalp')
             # dedup via done-set (sym,bar_ts,side) — di-load sekali di atas, BUKAN per-pair reset
-            for (si,side,grade) in sigs:
+            for (si,side,grade,src) in sigs:
                 i=si
+                # FRESHNESS: sinyal scalp harus muda (<=4 bar = 20 mnt) — sinyal tua = bangkai,
+                # bikin backlog LLM 30-45 dtk/keputusan numpuk (scalper gak nunggu 90 mnt)
+                if src=='scalp' and i<len(kk)-5: continue
                 if i>=len(kk)-24:
                     key=(sym,kk[i][0],side)
                     if key in done: continue
@@ -298,8 +303,10 @@ def _iterate_inner(once=False):
                     reg=rb.regime_1h(sym)
                     fund=fund_last(sym)
                     tvv=tv_ta(sym) if not once else None
-                    brief=ds.build_briefing(sym,grade,side,score,reg,fund,tvv,True)
-                    candidates.append({'sym':sym,'i':i,'side':side,'grade':grade,
+                    try: extras=ds.build_extras(sym,kk,rs)
+                    except Exception: extras=None
+                    brief=ds.build_briefing(sym,grade,side,score,reg,fund,tvv,True,extras=extras)
+                    candidates.append({'sym':sym,'i':i,'side':side,'grade':grade,'key':key,
                                        'brief':brief,'entry_next':float(kk[i+1][1]) if i+1<len(kk) else None,
                                        'regime':reg})
                     done.add(key)
@@ -315,6 +322,12 @@ def _iterate_inner(once=False):
         log({'event':'decision','symbol':cd['sym'],'side':cd['side'],'grade':cd['grade'],
              'decision':d.get('decision'),'conf':d.get('confidence'),
              'reason':d.get('reason'),'factor':d.get('key_factor')})
+        if d.get('decision') not in ('CONFIRMED','REJECT'):
+            # llm_err/gateway mati: JANGAN dedup permanen — lepas dari done supaya iterasi
+            # berikutnya nanya lagi ke bos (bug UNI-A 20:40 WIB: grade A hilang selamanya)
+            done.discard(cd.get('key'))
+            st['done']=[list(k) for k in list(done)[-600:]]
+            log({'event':'retry_later','symbol':cd['sym'],'msg':'llm_err -> kandidat diulang iterasi berikut'})
         save_state(st)  # persist done-list juga (dedup lintas restart)
         if d.get('decision')!='CONFIRMED': continue
         if n_open+confirmed>=og.MAX_GLOBAL_POSITIONS:
@@ -346,6 +359,9 @@ def _iterate_inner(once=False):
         entry=cd['entry_next']
         if entry is None: continue
         side=cd['side']
+        # RE-CHECK tepat sebelum mutasi: selama tunggu LLM (27-45s/kandidat), dunia bisa berubah
+        if cd['sym'] in st['open']:
+            log({'event':'skip_open','symbol':cd['sym'],'msg':'posisi sudah ada (re-check pre-mutasi)'}); continue
         # CHOP SNIPER: regime RANGE = TP 2:1 (cepat), hold pendek 8 jam; TREND = 3:1, hold 40 jam
         regime=cd.get('regime','RANGE')
         tp_rr=TP_RR_CHOP if regime=='RANGE' else TP_RR_TREND
@@ -434,6 +450,16 @@ if __name__=='__main__':
     elif a.once:
         print(json.dumps(iterate(once=True),indent=1))
     else:
+        # anti-double-iterator: kalau lock sudah dipegang proses lain saat boot, jangan perang
+        import fcntl as _f
+        _probe=open(LOCKF,'w')
+        try:
+            _f.flock(_probe,_f.LOCK_EX|_f.LOCK_NB)
+            _f.flock(_probe,_f.LOCK_UN)
+        except BlockingIOError:
+            print('[dewa-live] BOOT: lock dipegang proses lain -> exit (penjaga sudah ada)',flush=True)
+            os._exit(0)
+        _probe.close()
         print(f"[dewa-live] loop start pairs={len(PAIRS)} LIVE={LIVE}",flush=True)
         # startup notif: user harus liat bot online tiap kali restart
         try:

@@ -35,7 +35,7 @@ def gen_trend_signals(kk, rs, htf15, htf60, vsma):
             rsi_ok = 35 <= rs[i] <= 60                             # bukan overbought
             wick = (min(o[i],c[i])-l[i])/rng
             if near_ema and rsi_ok and wick>=0.40 and volx>1.0:
-                grade = 'A' if volx>2.0 and wick>=0.55 else 'B'
+                grade = 'A' if volx>1.5 and wick>=0.55 else 'B'
                 sigs.append((i,'L',grade))
         # TREND DOWN + SHORT rally
         elif c[i]<e60 and e15<e60:
@@ -43,27 +43,93 @@ def gen_trend_signals(kk, rs, htf15, htf60, vsma):
             rsi_ok = 40 <= rs[i] <= 65
             wick = (h[i]-max(o[i],c[i]))/rng
             if near_ema and rsi_ok and wick>=0.40 and volx>1.0:
-                grade = 'A' if volx>2.0 and wick>=0.55 else 'B'
+                grade = 'A' if volx>1.5 and wick>=0.55 else 'B'
                 sigs.append((i,'S',grade))
     return sigs
 
-def gen_hybrid(kk, rs, zz, vsma, htf15, htf60):
-    """Gabung fade + trend, dedupe per bar."""
+def gen_hybrid(kk, rs, zz, vsma, htf15, htf60, extra_engines=None):
+    """Gabung fade + trend + (opsional) P6-loose & P5-scalp, dedupe per bar.
+    extra_engines: None | 'p6' (fade longgar, toggle .env P6_LOOSE=on)
+                   | 'scalp' (kurir momentum) | 'all'
+    Output: (idx, side, grade, src) — src utk freshness window di dewa_live."""
     fade=rb.gen_signals(kk,rs,zz,vsma)
     trend=gen_trend_signals(kk,rs,htf15,htf60,vsma)
+    allsigs=[(s[0],s[1],s[2],'fade') for s in fade]+[(s[0],s[1],s[2],'trend') for s in trend]
+    if extra_engines in ('p6','all'):
+        allsigs+=[(s[0],s[1],s[2],'p6') for s in gen_loose_fade(kk,rs,zz,vsma)]
+    if extra_engines in ('scalp','all'):
+        allsigs+=[(s[0],s[1],s[2],'scalp') for s in gen_scalp(kk,rs,zz,vsma)]
     by_bar={}
-    for s in fade: by_bar.setdefault(s[0],[]).append(s)
-    for s in trend: by_bar.setdefault(s[0],[]).append(s)
+    for s in allsigs: by_bar.setdefault(s[0],[]).append(s)
     out=[]
     for i,ss in sorted(by_bar.items()):
-        # kalau fade & trend bentrok arah di bar sama -> skip (kabut)
+        # kalau arah bentrok di bar sama -> skip (kabut)
         sides={s[1] for s in ss}
         if len(sides)>1: continue
-        # grade naik kalau konfluensi (fade+trend sepakat arah)
-        if len(ss)>1:
-            out.append((i, ss[0][1], 'A'))
-        else:
-            out.append(ss[0])
+        # prioritas grade A; dua engine sepakat -> A; source engine pertama
+        grades=[s[2] for s in ss]
+        grade='A' if (len(ss)>1 or 'A' in grades) else 'B'
+        out.append((i, ss[0][1], grade, ss[0][3]))
+    return out
+
+def gen_loose_fade(kk, rs, zz, vsma):
+    """P6 — fade longgar, 2 varian dari backtest 30 hari (keduanya expectancy positif):
+       A: z>=3.0 bypass imb (RSI ekstrem tetap)  |  B: RSI 70/30 + z>2.5 + imb standar
+       Grade B (belum pernah dibuktikan lebih baik dr grade A fade asli)."""
+    sigs=[]
+    o=[r[1] for r in kk]; h=[r[2] for r in kk]; l=[r[3] for r in kk]; c=[r[4] for r in kk]
+    for i in range(210,len(c)-2):
+        r=rs[i]; z=zz[i]
+        if r is None or z is None: continue
+        rng=h[i]-l[i]
+        if rng<=0: continue
+        imb=((min(o[i],c[i])-l[i])-(h[i]-max(o[i],c[i])))/rng
+        if r>75 and z>=3.0 and imb>=-0.5: sigs.append((i,'S','B'))
+        elif r<25 and z<=-3.0 and imb<=0.5: sigs.append((i,'L','B'))
+        elif r>70 and z>2.5 and imb>=0.15: sigs.append((i,'S','B'))
+        elif r<30 and z<-2.5 and imb<=-0.15: sigs.append((i,'L','B'))
+    return sigs
+
+def gen_scalp(kk, rs, zz, vsma, obv=None):
+    """P5 — kurir momentum scalper (hasil backtest 30 hari: 11.5k trade, avg +$0.117):
+       1) stoch_rsi belok dari ekstrem (>80 turun = SHORT / <20 naik = LONG)
+       2) breakout: volx>2.5 + body>60% range searah
+       Konfirmasi: OBV 10-bar searah trade + volx>=1.2.
+       Grade A = volx>=1.5, B = sisanya."""
+    sigs=[]
+    o=[r[1] for r in kk]; h=[r[2] for r in kk]; l=[r[3] for r in kk]; c=[r[4] for r in kk]; v=[r[5] for r in kk]
+    rs2=_stoch_from_rsi(rs)
+    if obv is None:
+        obv=[0.0]
+        for i in range(1,len(c)):
+            obv.append(obv[-1]+(v[i] if c[i]>c[i-1] else (-v[i] if c[i]<c[i-1] else 0)))
+    for i in range(210,len(c)-2):
+        if i<1: continue
+        a=rs2[i]; b=rs2[i-1]
+        if a is None or b is None: continue
+        rng=h[i]-l[i]
+        if rng<=0 or vsma[i] is None: continue
+        volx=v[i]/vsma[i]
+        if volx<1.2: continue
+        obv_dir=obv[i]-obv[i-10]
+        turn_s = b>80 and a<b-3
+        turn_l = b<20 and a>b+3
+        body=abs(c[i]-o[i])/rng
+        brk_s = volx>2.5 and body>0.6 and c[i]<o[i]
+        brk_l = volx>2.5 and body>0.6 and c[i]>o[i]
+        if (turn_s or brk_s) and obv_dir<0:
+            sigs.append((i,'S','A' if volx>=1.5 else 'B'))
+        elif (turn_l or brk_l) and obv_dir>0:
+            sigs.append((i,'L','A' if volx>=1.5 else 'B'))
+    return sigs
+
+def _stoch_from_rsi(rs, n=14):
+    out=[None]*len(rs)
+    for i in range(n,len(rs)):
+        w=[x for x in rs[i-n+1:i+1] if x is not None]
+        if len(w)<n: continue
+        hi,lo=max(w),min(w)
+        out[i]=100*(rs[i]-lo)/(hi-lo) if hi>lo else 50.0
     return out
 
 def build_htf_maps(sym, k5_len):

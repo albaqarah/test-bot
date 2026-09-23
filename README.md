@@ -10,6 +10,39 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 
 ---
 
+## CHANGELOG PATCH v6 (23 Sep 2026)
+
+### P5 - Kurir Scalper Momentum (JALUR BARU, default ON)
+- Masalah: kurir lama cuma 1 jalur (fade ekstrem 3-gate: RSI>75 + z>1.5 + wick) -> blind 94% momen scalping
+  (bedah 9,5 jam: 17 fade lolos vs 259 momen momentum, 39 di antaranya gerak >=2%)
+- Generator baru `gen_scalp` (hybrid_rules.py): stoch_rsi belok dari ekstrem (>80 turun = SHORT / <20 naik = LONG)
+  + breakout (volx>2.5, body>60%) + konfirmasi OBV 10-bar searah + volx>=1.2
+- Backtest 30 hari (41 pair, ekonomi bot asli): 11.528 trade, avg +$0.117, PnL virtual +$1.354
+- FRESHNESS GATE: sinyal scalp hanya dikirim ke bos LLM jika umur <=4 bar (20 menit) - sinyal tua bikin
+  backlog LLM 30-45 detik/keputusan (lightvela reasoning burn) dan scalping gak nunggu 90 menit
+
+### P6 - Fade Longgar (TOGGLE, default OFF)
+- `gen_loose_fade`: varian A (z>=3.0 bypass wick-gate) + varian B (RSI 70/30 + z>2.5)
+- Backtest 30 hari: A 1.635 trade avg +$0.076 | B 1.008 trade avg +$0.132 (keduanya expectancy positif)
+- AKTIFKAN: .env `P6_LOOSE=on` -> restart. ROLLBACK: `P6_LOOSE=off` (tanpa sentuh kode)
+
+### Skill bos v6 (dewa_skill.py)
+- Paket analisis baru untuk briefing bos LLM: `chart` (sparkline 24-candle ASCII), `kdj`, `stoch_rsi`,
+  `obv_slope`, `btc_bias` (EMA20/50 BTC 1h), `rel_str_24h` (kekuatan alt vs BTC, proxy dominance)
+- Aturan scalper momentum 4/6 konfirmasi: boleh entry walau RSI gak ekstrem, grade B di RANGE boleh lewat
+- Anti-jebakan-wick: bos wajib pikirkan SL di balik struktur + TP di swing berikutnya
+
+### FIX BE race + pm2 satu penulis state
+- BUG: cron hourly `--once` = iterator kedua, timpa state pm2 (be_moved True hilang -> 4/11 SL full padahal
+  sempet profit; kasus UNI trig 24 menit sebelum SL). Cron DI-PAUSE permanen - pm2 = satu-satunya penulis
+- Bukti fix: 4/4 posisi BE exit -$0.01 (FIL, LDO, ATOM, ENA) - sebelumnya -$0.26 per SL
+- Migrasi supervisor bash -> pm2 (auto-boot systemd, restart-delay 5s, kill-switch exit 99 tetap)
+
+### Lain-lain
+- llm_err tidak lagi membunuh kandidat permanen (done.discard -> retry iterasi berikutnya)
+- Boot-lock check + re-check pre-mutasi (anti dobel proses / dobel entry)
+- Parser .env strip komentar inline + config echo di startup notif
+
 ## CHANGELOG PATCH v5 (22 Sep 2026)
 
 | Patch | Isi |
