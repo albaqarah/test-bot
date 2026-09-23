@@ -10,6 +10,31 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 
 ---
 
+## CHANGELOG PATCH v6.1 (23 Sep malam) - HOTFIX
+
+### P9 CRITICAL FIX - Side inversion
+- BUG: kurir ngirim side 'L'/'S' tapi jalur mutasi cek 'LONG'/'SHORT' -> SEMUA posisi LONG dapat
+  SL/TP TERBALIK (SL di atas, TP di bawah) + arah PnL salah. Kasus nyata: BCH LONG 21:51 WIB
+  entry 330.19, SL 334.15 (atas!), TP 318.30 (bawah!) -> profit +3.18% dicatat -$0.26.
+- FIX: normalisasi side di satu titik sebelum mutasi; unit test orientasi LONG/SHORT wajib lulus.
+- BONUS BUG: branch LIVE memakai variabel posisi SEBELUMNYA (dipakai sebelum didefinisikan) -
+  fatal saat MODE=live. Direstrukturisasi: hitung entry/side/SL/TP dulu -> baru cabang LIVE/dry.
+- Entry refresh: harga live fapi saat CONFIRMED (bukan open-candle basi 2.8%).
+- Ledger dikoreksi: -$1.08 -> -$0.18 (audit trail di state).
+
+### P1 - Cooldown di titik mutasi
+- Re-check cooldown tepat sebelum open (dulu cuma saat scan) - anti re-entry 100 detik pasca-SL.
+
+### P7 - Briefing source-aware
+- Kandidat scalper dibingkai "MOMENTUM LANJUTAN" ke bos LLM: oversold/overbought BUKAN alasan
+  nolak (itu tandanya gerakan kuat). Bos nilai konfirmasi lanjutan, bukan reversal fade.
+
+### P8 - Scalper rev (indikator layar scalper)
+- Trigger tambahan: RSI(6) belok dari >80/<20 (persis lensa Binance app user).
+- OBV jadi soft-veto (nolak hanya jika melawan >3x avg vol) - OBV hard-gate lama membunuh
+  SHORT pucuk valid (OBV selalu positif habis rally = kontradiktif dengan momentum lanjutan).
+- Replay bukti: pucuk BTC 23 Sep 20:44 WIB (RSI6 84) kini tertangkap - SHORT @85.783 jam 20:35.
+
 ## CHANGELOG PATCH v6 (23 Sep 2026)
 
 ### P5 - Kurir Scalper Momentum (JALUR BARU, default ON)

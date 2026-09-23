@@ -82,14 +82,19 @@ rel_str_24h: performa alt vs BTC 24 jam (positif = alt lebih kuat dari BTC)
  "key_factor":"satu frasa microstructure terpenting",
  "reason":"<=15 kata, bahasa Indonesia"}"""
 
-def build_briefing(sym, grade, side, score, regime, funding, tv, wick_rejection, extras=None):
-    """Setor kandidat ke bos: paket lengkap grade A/B (+ scalper extras v6)."""
+def build_briefing(sym, grade, side, score, regime, funding, tv, wick_rejection, extras=None, source='fade'):
+    """Setor kandidat ke bos: paket lengkap grade A/B (+ scalper extras v6).
+    source: 'fade' | 'trend' | 'p6' | 'scalp' — mengubah FRAMING evaluasi bos (P7)."""
     b={
         "symbol": sym, "grade": grade,
-        "side": "LONG" if side == "L" else "SHORT",
+        "side": "LONG" if side in ("L","LONG") else "SHORT",
         "score": score, "regime": regime, "funding": funding,
         "tv": tv, "wick_rejection": wick_rejection,
+        "source": source,
     }
+    if source=='scalp':
+        # P7: jangan dinilai sbg reversal-fade! Ini momentum LANJUTAN.
+        b["evaluasi"]="MOMENTUM-LANJUTAN: kurir nembak SEARAH breakdown/breakout yang baru terjadi. Oversold/overbought BUKAN alasan nolak — itu justru tandanya gerakan kuat. Nilai: apakah arah ini mungkin LANJUT (volume searah, OBV searah, BTC bias membantu, gak terlambat >20 menit)? Jawab CONFIRMED utk lanjutan, REJECT hanya kalau momentum gugur (volume kering, OBV balik, kehabisan tenaga)."
     if extras: b.update(extras)
     return b
 

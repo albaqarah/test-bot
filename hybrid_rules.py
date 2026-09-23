@@ -90,19 +90,37 @@ def gen_loose_fade(kk, rs, zz, vsma):
         elif r<30 and z<-2.5 and imb<=-0.15: sigs.append((i,'L','B'))
     return sigs
 
+def rsi6(c, n=6):
+    """RSI cepat ala layar scalper (Wilder)."""
+    out=[None]*len(c); g=l2=0.0
+    for i in range(1,n+1):
+        d=c[i]-c[i-1]; g+=max(d,0); l2+=max(-d,0)
+    ag,al=g/n,l2/n; out[n]=100-100/(1+ag/al) if al else 100.0
+    for i in range(n+1,len(c)):
+        d=c[i]-c[i-1]; ag=(ag*(n-1)+max(d,0))/n; al=(al*(n-1)+max(-d,0))/n
+        out[i]=100-100/(1+ag/al) if al else 100.0
+    return out
+
 def gen_scalp(kk, rs, zz, vsma, obv=None):
-    """P5 — kurir momentum scalper (hasil backtest 30 hari: 11.5k trade, avg +$0.117):
-       1) stoch_rsi belok dari ekstrem (>80 turun = SHORT / <20 naik = LONG)
-       2) breakout: volx>2.5 + body>60% range searah
-       Konfirmasi: OBV 10-bar searah trade + volx>=1.2.
+    """P8 REV — kurir momentum scalper:
+       Trigger (salah satu):
+         1) stoch_rsi(RSI14) belok dari ekstrem (>80 turun = SHORT / <20 naik = LONG)
+         2) RSI(6) belok dari ekstrem (>80 turun / <20 naik) — persis layar scalper (pucuk BTC 20:44: RSI6 84)
+         3) breakout: volx>2.5 + body>60% range searah
+       Konfirmasi: volx>=1.2. OBV = SOFT-VETO: nolak hanya jika OBV 10-bar MELAWAN KERAS
+       (|obv10| > 3x vol rata2 terhadap arah trade) — dulu hard-gate OBV<0 membunuh SHORT pucuk
+       yang valid (OBV selalu positif habis rally = kontradiktif dgn momentum lanjutan).
        Grade A = volx>=1.5, B = sisanya."""
     sigs=[]
     o=[r[1] for r in kk]; h=[r[2] for r in kk]; l=[r[3] for r in kk]; c=[r[4] for r in kk]; v=[r[5] for r in kk]
     rs2=_stoch_from_rsi(rs)
+    r6=rsi6(c)
     if obv is None:
         obv=[0.0]
         for i in range(1,len(c)):
             obv.append(obv[-1]+(v[i] if c[i]>c[i-1] else (-v[i] if c[i]<c[i-1] else 0)))
+    avgv=[None]*20
+    for i in range(20,len(c)): avgv.append(sum(v[i-20:i])/20)
     for i in range(210,len(c)-2):
         if i<1: continue
         a=rs2[i]; b=rs2[i-1]
@@ -111,15 +129,24 @@ def gen_scalp(kk, rs, zz, vsma, obv=None):
         if rng<=0 or vsma[i] is None: continue
         volx=v[i]/vsma[i]
         if volx<1.2: continue
-        obv_dir=obv[i]-obv[i-10]
+        obv10=obv[i]-obv[i-10]
+        # hard veto hanya kalau OBV melawan KERAS (>3x avg vol dalam satuan volume)
+        hard_against_s = obv10 > 3*avgv[i]   # mau SHORT tapi buying pressure gila
+        hard_against_l = obv10 < -3*avgv[i]  # mau LONG tapi dumping gila
+        # trigger 1: stoch_rsi belok
         turn_s = b>80 and a<b-3
         turn_l = b<20 and a>b+3
+        # trigger 2: RSI(6) belok dari ekstrem (layar user)
+        x6=r6[i]; w6=r6[i-1] if i>=1 else None
+        turn6_s = (w6 is not None and w6>80 and x6<w6-5)
+        turn6_l = (w6 is not None and w6<20 and x6>w6+5)
+        # trigger 3: breakout volume
         body=abs(c[i]-o[i])/rng
         brk_s = volx>2.5 and body>0.6 and c[i]<o[i]
         brk_l = volx>2.5 and body>0.6 and c[i]>o[i]
-        if (turn_s or brk_s) and obv_dir<0:
+        if (turn_s or brk_s or turn6_s) and not hard_against_s:
             sigs.append((i,'S','A' if volx>=1.5 else 'B'))
-        elif (turn_l or brk_l) and obv_dir>0:
+        elif (turn_l or brk_l or turn6_l) and not hard_against_l:
             sigs.append((i,'L','A' if volx>=1.5 else 'B'))
     return sigs
 

@@ -20,7 +20,7 @@ Usage: python3 dewa_live.py --pairs ALL --once   (1 iterasi, untuk cron)
        python3 dewa_live.py --pairs ALL          (loop terus)
        python3 dewa_live.py --live               (EKSEKUSI BENERAN — butuh API key, default OFF)
 """
-import importlib.util, json, os, sys, time, argparse, subprocess
+import importlib.util, json, os, sys, time, argparse, subprocess, urllib.request
 from datetime import datetime, timezone
 
 def _load_env(path='/home/agentuser/.env'):
@@ -107,6 +107,14 @@ def load_state():
     except Exception: return {'open':{}}
 
 def save_state(st): json.dump(st, open(STATE,'w'), indent=1)
+
+def live_px(sym):
+    """Harga live terakhir (ticker/price fapi, weight 1). None kalau gagal."""
+    try:
+        return float(json.load(urllib.request.urlopen(
+            f"https://fapi.binance.com/fapi/v1/ticker/price?symbol={sym}",timeout=8).read())['price'])
+    except Exception:
+        return None
 
 def fund_last(sym):
     try:
@@ -305,8 +313,8 @@ def _iterate_inner(once=False):
                     tvv=tv_ta(sym) if not once else None
                     try: extras=ds.build_extras(sym,kk,rs)
                     except Exception: extras=None
-                    brief=ds.build_briefing(sym,grade,side,score,reg,fund,tvv,True,extras=extras)
-                    candidates.append({'sym':sym,'i':i,'side':side,'grade':grade,'key':key,
+                    brief=ds.build_briefing(sym,grade,side,score,reg,fund,tvv,True,extras=extras,source=src)
+                    candidates.append({'sym':sym,'i':i,'side':side,'grade':grade,'key':key,'src':src,
                                        'brief':brief,'entry_next':float(kk[i+1][1]) if i+1<len(kk) else None,
                                        'regime':reg})
                     done.add(key)
@@ -319,6 +327,10 @@ def _iterate_inner(once=False):
     confirmed=0
     for cd in candidates:
         d=llm_call(cd['brief'])
+        # P9 NORMALISASI SIDE: kurir ngirim 'L'/'S', seluruh jalur mutasi pakai 'LONG'/'SHORT'.
+        # 'L' != 'LONG' bikin SL/TP kebalik (bug BCH 21:51 WIB: LONG kena SL palsu di profit)
+        _side=cd['side']
+        cd['side']={'L':'LONG','S':'SHORT'}.get(_side,_side)
         log({'event':'decision','symbol':cd['sym'],'side':cd['side'],'grade':cd['grade'],
              'decision':d.get('decision'),'conf':d.get('confidence'),
              'reason':d.get('reason'),'factor':d.get('key_factor')})
@@ -332,13 +344,36 @@ def _iterate_inner(once=False):
         if d.get('decision')!='CONFIRMED': continue
         if n_open+confirmed>=og.MAX_GLOBAL_POSITIONS:
             log({'event':'skip_full','symbol':cd['sym']}); continue
+        # P9 RESTRUKTURISASI: hitung entry/side/SL/TP SEBELUM cabang LIVE/dry.
+        # Dulu: branch LIVE memakai side/entry/sl/tp dari kandidat SEBELUMNYA (undefined di iterasi pertama)
+        side=cd['side']
+        entry=cd['entry_next']
+        # P9 ENTRY-REFRESH: antre LLM 27-45 dtk bikin open-candle basi (BCH: 330.19 vs live 339.57 = telad 2.8%).
+        try:
+            px=live_px(cd['sym'])
+            if px and px>0: entry=px
+            else:
+                log({'event':'skip_stale','symbol':cd['sym'],'msg':'harga live gak valid'}); continue
+        except Exception:
+            log({'event':'skip_stale','symbol':cd['sym'],'msg':'gagal fetch harga live utk entry refresh'}); continue
+        # RE-CHECK tepat sebelum mutasi: selama tunggu LLM (27-45s/kandidat), dunia bisa berubah
+        if cd['sym'] in st['open']:
+            log({'event':'skip_open','symbol':cd['sym'],'msg':'posisi sudah ada (re-check pre-mutasi)'}); continue
+        # P1 COOLDOWN di titik mutasi (dulu cuma dicek saat scan): anti re-entry 100 detik pasca-SL
+        if int(time.time()*1000) < st.get('cooldown',{}).get(cd['sym'],0):
+            log({'event':'skip_cooldown','symbol':cd['sym'],'msg':'cooldown aktif (re-check di mutasi)'}); continue
+        # CHOP SNIPER: regime RANGE = TP 3:1 (cepat), hold pendek; TREND = 4:1, hold panjang
+        regime=cd.get('regime','RANGE')
+        tp_rr=TP_RR_CHOP if regime=='RANGE' else TP_RR_TREND
+        sl_d=entry*SL_PCT; tp_d=sl_d*tp_rr  # SL % dari harga (proporsional semua coin)
+        sl=entry-sl_d if side=='LONG' else entry+sl_d
+        tp=entry+tp_d if side=='LONG' else entry-tp_d
         if LIVE:
             # EKSEKUSI NYATA: market order + SL/TP diembankan ke janitor order_guard
             if not og.API_KEY or not og.API_SECRET:
                 log({'event':'LIVE_SKIP_NO_KEY','symbol':cd['sym']}); continue
             try:
                 close_side='SELL' if side=='LONG' else 'BUY'
-                # market order: qty dari notional (MARGIN*LEV), step-size disesuaikan simbol
                 qty=round(MARGIN*LEV/entry, 3 if entry>=10 else (0 if entry>=100 else 1))
                 og._req('POST','/fapi/v1/order',{'symbol':cd['sym'],'side':'BUY' if side=='LONG' else 'SELL',
                         'type':'MARKET','quantity':f'{qty}'})
@@ -356,18 +391,6 @@ def _iterate_inner(once=False):
             except Exception as ex:
                 log({'event':'LIVE_ERR','symbol':cd['sym'],'msg':str(ex)[:120]})
             continue
-        entry=cd['entry_next']
-        if entry is None: continue
-        side=cd['side']
-        # RE-CHECK tepat sebelum mutasi: selama tunggu LLM (27-45s/kandidat), dunia bisa berubah
-        if cd['sym'] in st['open']:
-            log({'event':'skip_open','symbol':cd['sym'],'msg':'posisi sudah ada (re-check pre-mutasi)'}); continue
-        # CHOP SNIPER: regime RANGE = TP 2:1 (cepat), hold pendek 8 jam; TREND = 3:1, hold 40 jam
-        regime=cd.get('regime','RANGE')
-        tp_rr=TP_RR_CHOP if regime=='RANGE' else TP_RR_TREND
-        sl_d=entry*SL_PCT; tp_d=sl_d*tp_rr  # SL % dari harga (proporsional semua coin)
-        sl=entry-sl_d if side=='LONG' else entry+sl_d
-        tp=entry+tp_d if side=='LONG' else entry-tp_d
         st['open'][cd['sym']]={'side':side,'entry':entry,'sl':sl,'tp':tp,'be_moved':False,
                                'open_ts':int(time.time()*1000),'conf':d.get('confidence'),
                                'grade':cd['grade'],'regime':regime,'tp_rr':tp_rr}
