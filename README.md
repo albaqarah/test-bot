@@ -211,12 +211,29 @@ Data (Binance klines 5m/1h + funding + TradingView multi-TF)
 
 ## HASIL BACKTEST (jujur)
 
-9 engine, ~60.000 trade simulasi, IS/OOS terpisah, fee taker 0.05%/sisi ×10x:
+**Riwayat engine lama** (9 engine, ~60.000 trade, IS/OOS terpisah, fee taker 0.05%/sisi ×10x):
 - V15 StochRSI cross original: **-$70.50** (3.825 trades)
-- Fade-ekstrem + rulebook ketat (engine ini): **-$0.67** (349 trades) — dekat breakeven
-- **Tidak ada klaim profit.** Dry run adalah ujian sebenarnya.
+- Fade-ekstrem + rulebook ketat: **-$0.67** (349 trades) — dekat breakeven
 
-## HASIL DRY RUN LIVE (ledger resmi, per 22 Sep 2026)
+**Backtest 30 hari engine v6** (41 pair USDⓈ-M, 5m, ekonomi bot asli: SL 1.2% = -$0.26,
+TP 4R trend = +$0.94, TP 3R chop = +$0.68, BE = -$0.01, regime 1h EMA20/50):
+
+| Kurir | Trade | TP | SL | BE | PnL virtual | Avg/trade |
+|---|---|---|---|---|---|---|
+| FADE asli (v5) | 1.122 | 169 | 51 | 902 | **+$121** | +$0.108 |
+| P6-A fade longgar (z≥3 bypass wick) | 1.635 | 192 | 91 | 1.351 | +$124 | +$0.076 |
+| P6-B fade longgar (RSI 70 + z>2.5) | 1.008 | 175 | 36 | 797 | **+$133** | +$0.132 |
+| P5 SCALPER momentum | 11.528 | 1.764 | 337 | 9.388 | **+$1.354** | +$0.117 |
+| Semua gabung (P5+P6) | 15.293 | 2.300 | 515 | 12.438 | +$1.732 | +$0.113 |
+
+**Catatan jujur:**
+- Simulasi ideal: belum termasuk penolakan bos LLM (~75% reject), batas max 5 posisi global,
+  slippage fill, dan delay keputusan LLM. Hasil real pasti lebih kecil - angka dipakai untuk
+  BANDINGKANT Expectancy antar-kurir, bukan proyeksi cuan.
+- P6 default OFF (toggle .env `P6_LOOSE`) sampai data live membuktikan.
+- **Tidak ada klaim winrate/profit.** Dry run adalah ujian sebenarnya.
+
+## HASIL DRY RUN LIVE (ledger resmi, per 23 Sep 2026)
 
 - Day-2 hybrid+LLM: **+$0.46** (3W/1L: WLD/ORDI/SUI TP, TRX SL)
 - UNIUSDT SHORT grade B: **+$0.22** (conf 74, climax z5.2 vol2.5x RSI90, TP 6 detik)
