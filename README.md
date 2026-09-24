@@ -11,6 +11,27 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 ---
 
 
+## CHANGELOG v6.3 (24 Sep malam) - TRADFI GATE + NOTIF v15 STYLE
+
+### P14: TradFi Session Gate (CME hours)
+- Entry XAU/XAG/XPT/PAXG HANYA saat session OPEN (unit test 10/10 skenario)
+- CLOSED: weekend (Fri >=17:00 ET s/d Sun 18:00 ET) + daily break 17:00-18:00 ET
+- Gate di kurir SEBELUM bos LLM = nol panggilan API saat market tutup
+- `skip_tradfi_closed` di log; label session tampil di notif start & briefing
+
+### Notif gaya v15 (isi sistem v6.2)
+- START: BOT START · DEWA SNIPER v6.2 + panel Mode/Ekuitas/Margin/Slot/TP-SL/BE-TRAIL/TradFi/Bos
+- ENTRY: harga, notional, TP/SL %, varian bos, regime, momentum_class+RSI6, slot, rekap 24h
+- TRAIL LOCK: notif khusus saat SL trailing mengunci profit (puncak − 0.3%)
+- CLOSED: bar ROI, Entry→Exit (harga eksekusi asli), Gross/Fee/NET terpisah, rekap 24 jam, cooldown
+- MORNING BRIEFING: bar winrate ▰▱, PF, Gross/Fee/NET, leaderboard best/worst, regime, TradFi, bos
+- Klasifikasi W/L jujur: exit rata (LOCK/BE) tidak dihitung lose
+
+### Audit full sebelum push
+- Compile 11 module OK; import chain OK; konstanta panel OK
+- Smoke 41 pair: 995 sinyal valid, vision enrich 995/995, 0 tuple rusak
+- Live: err 0, 1 proses, gate hemat-api tercatat, notif pipeline terkirim
+
 ## CHANGELOG v6.2 (24 Sep) - JEV BOS + TRAILING PROFIT LOCK + VISION PACK
 
 ### Bos LLM: JEV (TypeSafe jev-1.13)

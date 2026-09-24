@@ -43,6 +43,7 @@ import order_guard as og
 import tg_notify as tg
 import order_cleanup as oc
 import hybrid_rules as hr
+import tradfi_session as tfs
 
 og.MAX_GLOBAL_POSITIONS=5
 
@@ -373,6 +374,10 @@ def _iterate_inner(once=False):
                     if vcls=='kering':
                         log({'event':'skip_dry_momentum','symbol':sym,'side':side,'vol_x':score.get('vol_x')})
                         continue
+                    # P14 TRADFI GATE: XAU/XAG/XPT/PAXG entry HANYA saat CME session OPEN (persis v15)
+                    if sym in tfs.TRADFI and not tfs.tradfi_open():
+                        log({'event':'skip_tradfi_closed','symbol':sym,'side':side,'session':tfs.tradfi_label()[0]})
+                        continue
                     candidates.append({'sym':sym,'i':i,'side':side,'grade':grade,'key':key,'src':src,
                                        'brief':brief,'entry_next':float(kk[i+1][1]) if i+1<len(kk) else None,
                                        'regime':reg,'mclass':vcls})
@@ -569,17 +574,7 @@ if __name__=='__main__':
             nopen=len(st0.get('open',{}))
             saldo0=st0.get('saldo',0)
             mode_tag="🟢 LIVE — ORDER BENERAN" if LIVE else "⚪ DRY RUN — virtual"
-            lines=[f"🤖 BOT ONLINE — MODE HYBRID ({mode_tag})","━━━━━━━━━━━━━━━━━━",
-                   f"🧠 Bos: {BOS_PROVIDER.upper()}{' (failover: lightvela)' if BOS_PROVIDER=='jev' else ''}",
-                   f"⚙️ SL {SL_PCT*100:.1f}% | TP {TP_RR_TREND:.0f}R trend / {TP_RR_CHOP:.0f}R chop | Margin ${MARGIN*100:.0f} | BE {BE_TRIG*100:.1f}%",
-                   "🔁 Scan kontinu 41 pair",
-                   "🧠 Kurir: fade + trend pullback | Bos LLM gerbang terakhir",
-                   "⏱️ Watchdog 20s | Max 5 posisi | Margin $2 x 10x",
-                   f"🏦 Saldo net (virtual): {saldo0:+.2f} USD",
-                   f"📂 Posisi terbuka: {nopen}",
-                   f"⏰ {wib} WIB","━━━━━━━━━━━━━━━━━━",
-                   "✅ Semua patch aktif. Notif selanjutnya = entry/exit asli."]
-            tg.send("\n".join(lines))
+            tg.send(tg.fmt_start(saldo0, n_open=nopen))
         except Exception as e:
             print('startup_tg_err',repr(e),flush=True)
         while True:
