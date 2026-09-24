@@ -211,14 +211,26 @@ python3 dewa_live.py --once
 Output sukses: JSON `{"realized": [...], "candidates": N, "confirmed": N, "open_now": N}`.
 Kalau sinyal muncul & Telegram aktif → notif entry masuk.
 
-### 6. Jalankan produksi (supervisor auto-restart)
+### 6. Jalankan produksi (PM2 — direkomendasikan)
+```bash
+npm install -g pm2          # kalau belum ada
+pm2 start dewa_live.py --name dewa-live --interpreter python3
+pm2 save                    # simpan daftar proses (auto-respawn saat reboot via pm2 startup)
+# cek:
+pm2 list
+pm2 logs dewa-live          # log realtime
+pm2 restart dewa-live       # restart manual (misal setelah edit .env)
+pm2 stop dewa-live          # stop
+```
+Catatan: bot punya watchdog internal (self-kill exit 99 bila iterasi >900s) — pm2 otomatis respawn.
+
+<details><summary>Alternatif lama: nohup + supervisor script</summary>
 ```bash
 setsid nohup ./dewa_supervisor.sh > /dev/null 2>&1 &
-# supervisor: while-true, restart 5 detik setelah proses mati/hang (kill-switch exit 99)
-# cek:
-tail -f dewa_loop.log dewa_supervisor.log
+# atau manual:
+nohup python3 dewa_live.py > dewa_run.log 2>&1 &
 ```
-Alternatif manual: `nohup python3 dewa_live.py > dewa_run.log 2>&1 &`
+</details>
 
 ### 7. Morning briefing otomatis (07:00 WIB)
 ```bash

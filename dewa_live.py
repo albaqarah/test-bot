@@ -283,8 +283,10 @@ def manage_open(st, k_cache):
                 reason=last_reason(sym, st)
                 tg.send(tg.fmt_exit({'symbol':sym,'side':p.get('side'),'hit':hit,
                                      'pnl':pnl,'conf':p.get('conf'),'reason':reason,
-                                     'exit_px':exit_px,'sl':p['sl'],'entry':p['entry']},
-                                    st['saldo']))
+                                     'exit_px':exit_px,'sl':p['sl'],'entry':p['entry'],
+                                     'bars':round(bars_open,1)},
+                                    st['saldo'], n_open=len(st['open'])-1))
+                save_state(st)  # P15: save per exit — saldo gak boleh rollback kalau iterasi kena kill
                 del st['open'][sym]
             else:
                 st['open'][sym]=p
@@ -480,9 +482,14 @@ def _iterate_inner(once=False):
         reason=d.get('reason','') or d.get('key_factor','')
         log({'event':'open','symbol':cd['sym'],'side':side,'entry':entry,'sl':sl,'tp':tp,
              'conf':d.get('confidence'),'grade':cd['grade'],'reason':reason})
+        _v=(cd.get('brief') or {}).get('vision',{}) if isinstance(cd.get('brief'),dict) else {}
         tg.send(tg.fmt_open({'symbol':cd['sym'],'side':side,'grade':cd['grade'],
                              'entry':entry,'sl':sl,'tp':tp,'tp_rr':tp_rr,
-                             'conf':d.get('confidence'),'reason':reason}))
+                             'conf':d.get('confidence'),'reason':reason,
+                             'variant':str(d.get('variant','')).upper(),
+                             'regime':regime,'mclass':_v.get('momentum_class'),
+                             'rsi6':_v.get('rsi6_now'),
+                             'n_open':len(st['open']),'saldo':st.get('saldo',0)}))
         # save PER EVENT: kalau proses kena kill saat LLM error bertubi, keputusan gak ilang & gak diulang
         save_state(st)
     return {'realized':realized,'candidates':len(candidates),'confirmed':confirmed,

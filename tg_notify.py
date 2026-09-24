@@ -11,6 +11,13 @@ WIB = timezone(timedelta(hours=7))
 NL = chr(10)
 DIV = "━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
+
+def _wib_now():
+    """Waktu notif dibentuk — WIB (UTC+7), format gaya v15."""
+    from datetime import datetime, timezone, timedelta
+    return datetime.now(timezone(timedelta(hours=7))).strftime('%d %b %Y - %H:%M:%S WIB')
+
+
 def _load_env(path='/home/agentuser/.env'):
     try:
         for line in open(path):
@@ -114,9 +121,7 @@ def _mode_line():
 
 def _bos_line():
     prov=os.environ.get('BOS_PROVIDER','jev').strip().lower()
-    main='🟢 JEV (main)' if prov=='jev' else '🟢 lightvela (main)'
-    fb='⚪ lightvela (fallback)' if prov=='jev' else '⚪ jev (fallback)'
-    return f"🤖 {main}  {fb}"
+    return "🤖 🟢 JEV" if prov=='jev' else "🤖 🟢 lightvela"
 
 def _equity(saldo):
     live=os.environ.get('MODE','dry').strip().lower()=='live'
@@ -169,8 +174,10 @@ def fmt_open(e):
     notional=e.get('notional',20.0)
     variant=e.get('variant','')
     var_txt=f" (bos {variant} anti-wick)" if variant=='WIDE' else (f" (bos {variant})" if variant else "")
-    sl_pct=abs(e['sl']/e['entry']-1)*100
-    tp_pct=abs(e['tp']/e['entry']-1)*100
+    _long = e['side'] in ('LONG','L')
+    sl_pct=abs(e['sl']/e['entry']-1)*100*(-1 if _long else 1)   # LONG SL di bawah = minus; SHORT = plus
+    tp_pct=abs(e['tp']/e['entry']-1)*100*(1 if _long else -1)   # TP sebaliknya
+    conf=e.get('conf')
     mom=""
     if e.get('mclass') or e.get('rsi6') is not None:
         mom=NL+f"🧭 Momentum {e.get('mclass','?')} · RSI6 {e.get('rsi6','?')}"
@@ -184,18 +191,21 @@ def fmt_open(e):
         + NL + f"🛡️ SL     <code>{e['sl']}</code>  {sl_pct:+.2f}%{var_txt}"
         + NL + DIV
         + NL + f"🧭 Regime {e.get('regime','?')}"
+        + NL + f"🧠 Bos conf: {conf}/100"
         + NL + _bos_line().replace('🤖 ','🤖 ')
         + NL + f"🧠  <i>{e.get('reason','')}</i>"
         + mom
         + NL + DIV
         + NL + f"🎟️ Slot {e.get('n_open','?')}/5 · {_equity(e.get('saldo',0)).replace('💰 Ekuitas   ','💰 Ekuitas ')}"
-        + NL + f"📊 24h {r['w']}W/{r['l']}L · WR {_wr(r):.1f}% · Net {r['net']:+.2f}")
+        + NL + f"📊 24h {r['w']}W/{r['l']}L · WR {_wr(r):.1f}% · Net {r['net']:+.2f}"
+        + NL + "⏰ "+_wib_now())
 
 # ---------- TRAIL LOCK ----------
 def fmt_trail_lock(sym, side, new_sl, entry, peak):
     mv=(new_sl-entry)/entry*(100 if side=='LONG' else -100)
     return (f"🛡️ <b>BREAKEVEN TRAIL LOCKED</b> · {sym} · {side}"
-        + NL + f"SL digeser ke <code>{round(new_sl,6)}</code> (kunci profit {mv:+.2f}% dari puncak {round(peak,6)})")
+        + NL + f"SL digeser ke <code>{round(new_sl,6)}</code> (kunci profit {mv:+.2f}% dari puncak {round(peak,6)})"
+        + NL + "⏰ "+_wib_now())
 
 # ---------- CLOSED (gaya v15) ----------
 def fmt_exit(e, saldo, n_open=None):
@@ -235,7 +245,8 @@ def fmt_exit(e, saldo, n_open=None):
         DIV,
         f"💰 Ekuitas ${saldo:+.2f} ({'LIVE' if os.environ.get('MODE','dry')=='live' else 'DRY'})"
         + (f"  ·  🎟️ Slot {n_open}/5" if n_open is not None else "")
-        + NL + "🔒 Cooldown "+sym+" 30m"]
+        + NL + "🔒 Cooldown "+sym+" 30m"
+        + NL + "⏰ "+_wib_now()]
     return NL.join(lines)
 
 # ---------- MORNING BRIEFING (gaya v15) ----------
