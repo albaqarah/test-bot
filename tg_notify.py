@@ -67,8 +67,8 @@ def fmt_exit(e, saldo):
     if win: head, art = "🏆 <b>WIN</b>", "💎"
     elif e.get('hit') in ('BE','TIME'): head, art = "⚖️ <b>BREAKEVEN</b>", "🌀"
     else: head, art = "☠️ <b>LOSE</b>", "🩸"
-    px = price_of(e['symbol'])
-    lv = NL + f"💰 Exit live: <code>{px}</code>" if px else ""
+    px = e.get('exit_px') or price_of(e['symbol'])   # harga eksekusi asli (singkron app), fallback live
+    lv = NL + f"💰 Exit harga: <code>{px}</code>" if px else ""
     return (art + " " + head + f" - {e.get('hit')}"
         + NL + "━━━━━━━━━━━━━━━━━━"
         + NL + f"🎯 {SIDE.get(e.get('side'),e.get('side'))} {e['symbol']}" + lv

@@ -184,3 +184,68 @@ def build_extras(sym, kk, rs):
     chart=spark([r[4] for r in kk])
     return {'chart':chart,'kdj':{'K':K,'D':D,'J':J},'stoch_rsi':sr,
             'obv_slope':ob,'btc_bias':bb['bias'],'rel_str_24h':rel_strength(sym)}
+
+def rsi6_series(c, n=6, w=12):
+    """P13: sparkline RSI(6) 12 bar terakhir - mata bos utk overbought/oversold realtime."""
+    g=[0.0]; lo=[0.0]
+    for i in range(1,len(c)):
+        g.append(max(c[i]-c[i-1],0.0)); lo.append(max(c[i-1]-c[i],0.0))
+    out=[]
+    for i in range(n,len(c)+1):
+        ag=sum(g[i-n:i])/n; al=sum(lo[i-n:i])/n or 1e-9
+        out.append(100-100/(1+ag/al))
+    sp = spark(out[-w:], w) if len(out)>=w else None
+    return sp, (out[-1] if out else None)
+
+
+def classify_momentum(kk, sr=None, obv=None, volx=None, z=0.0, regime=''):
+    """P13: bos minta tau KONTEKS - gini nggak dia cuma nebak score.
+    Klasifikasi otomatis dari data fapi realtime per sinyal:
+      wick_extreme      = climax ekstrem (|z|>=2.5 / RSI6>90 / <10) -> fade
+      momentum_fallback = trend kuat -> ikut momentum
+      mean_reversion    = chop/range -> balik mean
+      breakout          = volx>2.5 + body>60% -> breakout (hati-hati false break)
+      kering            = volx<1.0 -> tidak ada aliran, skip
+    """
+    c=[r[4] for r in kk]; o=[r[1] for r in kk]
+    rng=kk[-1][2]-kk[-1][3]
+    body=abs(c[-1]-o[-1])/rng if rng>0 else 0
+    try:
+        _, r6 = rsi6_series(c)
+    except Exception:
+        r6 = None
+    if volx is not None and volx < 1.0:
+        cls='kering'
+    elif abs(z) >= 2.5 or (r6 is not None and (r6 > 90 or r6 < 10)):
+        cls='wick_extreme'
+    elif volx is not None and volx > 2.5 and body > 0.6:
+        cls='breakout'
+    elif regime and 'TREND' in str(regime).upper():
+        cls='momentum_fallback'
+    else:
+        cls='mean_reversion'
+    return cls, (round(r6,1) if r6 is not None else None)
+
+
+def enrich_briefing(brief, kk, rs=None):
+    """P13: suntik vision pack ke briefing bos - chart RSI6, momentum class, bar detail.
+    Return dict briefing BARU (jangan mutasi asli)."""
+    import copy
+    b=copy.deepcopy(brief)
+    c=[r[4] for r in kk]
+    try:
+        r6sp, r6 = rsi6_series(c)
+    except Exception:
+        r6sp, r6 = None, None
+    score=b.get('score',{}) if isinstance(b.get('score'),dict) else {}
+    volx=score.get('vol_x'); z=score.get('z',0.0)
+    try:
+        cls,r6v = classify_momentum(kk, volx=volx, z=z, regime=b.get('regime',''))
+    except Exception:
+        cls,r6v = 'mean_reversion', r6
+    b['vision']={
+        'rsi6_now':r6v, 'rsi6_chart':r6sp,
+        'momentum_class':cls,
+        'last_bar':{'o':kk[-1][1],'h':kk[-1][2],'l':kk[-1][3],'c':kk[-1][4],'vol':kk[-1][5]},
+        'note':'bos: lihat RSI6 ekstrem & momentum_class sebelum memilih. JANGAN melawan momentum_class tanpa alasan kuat.'}
+    return b

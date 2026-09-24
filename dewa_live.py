@@ -58,8 +58,11 @@ MARGIN=_cfg('MARGIN_USD',2.0)/100.0     # env = margin USD beneran ($2 = $2); in
 SL_PCT=_cfg('SL_PCT',0.004)             # SL = % dari harga entry
 TP_RR_TREND=_cfg('TP_RR_TREND',3.0)     # RR saat regime TREND_UP/DOWN
 TP_RR_CHOP=_cfg('TP_RR_CHOP',2.0)       # RR saat regime RANGE (chop sniper)
-BE_TRIG=_cfg('BE_TRIG',0.0010)          # shift BE kalau profit >= ini
-BE_OFF=_cfg('BE_OFF',0.0006)            # BE = entry +/- ini (harus > fee roundtrip 0.1%? -> 0.06%)
+BE_TRIG=_cfg('BE_TRIG',0.0010)          # (mode TRAIL=off) shift BE kalau profit >= ini
+BE_OFF=_cfg('BE_OFF',0.0006)            # (mode TRAIL=off) BE = entry +/- ini
+TRAIL_ACT=_cfg('TRAIL_ACT',0.003)       # P10b: mulai ngunci profit saat mv >= ini
+TRAIL_DIST=_cfg('TRAIL_DIST',0.002)     # P10b: SL mengunci sejauh ini di belakang ekstrem harga (trailing)
+TRAIL=str(os.environ.get('TRAIL','on')).split('#',1)[0].strip().lower() in ('on','1','true','yes')  # P10b toggle (rollback: off)
 MAXHOLD=_cfg('MAXHOLD_TREND',480,int)   # max hold bar 5m utk trend (480=40 jam)
 MAXHOLD_CHOP=_cfg('MAXHOLD_CHOP',96,int)# max hold utk chop (96=8 jam)
 COOLDOWN_MIN=_cfg('COOLDOWN_MIN',30,int)# re-entry cooldown per pair (menit)
@@ -111,7 +114,7 @@ def save_state(st): json.dump(st, open(STATE,'w'), indent=1)
 def live_px(sym):
     """Harga live terakhir (ticker/price fapi, weight 1). None kalau gagal."""
     try:
-        return float(json.load(urllib.request.urlopen(
+        return float(json.loads(urllib.request.urlopen(
             f"https://fapi.binance.com/fapi/v1/ticker/price?symbol={sym}",timeout=8).read())['price'])
     except Exception:
         return None
@@ -136,7 +139,19 @@ def tv_ta(sym):
     except Exception:
         return None
 
+BOS_PROVIDER=os.environ.get('BOS_PROVIDER','jev').strip().lower()   # 'jev' | 'lightvela' (.env)
+
 def llm_call(brief):
+    # P-jev: jev = bos utama (0.6 dtk, typed, no_json impossible); error -> fallback lightvela otomatis
+    if BOS_PROVIDER=='jev':
+        try:
+            import jev_bridge
+            r=jev_bridge.call_jev(brief)
+            if r.get('decision') in ('CONFIRMED','REJECT'):
+                return r
+            raise RuntimeError('jev bad response')
+        except Exception as e:
+            log({'event':'jev_fallback','msg':str(e)[:100]})
     base=os.environ.get("LLM_BASE_URL")
     key=os.environ.get("LLM_API_KEY") or os.environ.get("CUSTOM_API_KEY")
     model=os.environ.get("LLM_MODEL","auto")
@@ -182,22 +197,54 @@ def manage_open(st, k_cache):
     for sym in list(st['open'].keys()):
         p=st['open'][sym]
         try:
-            k5=k_cache.get(sym) or vg.fetch_hist_klines(sym,'5m',3)
+            k5=k_cache.get(sym) or vg.fetch_hist_klines(sym,'5m',4)
             k_cache[sym]=k5
-            last=k5[-1]
-            h,l=float(last[2]),float(last[3])
+            # P10a: BE hanya baca bar CLOSED — bar forming menyertakan wick SEBELUM entry
+            # (OPUSDT 05:52: high bar lama dihitung = "profit" palsu -> BE instan -> exit 28 dtk)
+            _cut=int(time.time()*1000)-300000
+            closed=[x for x in k5 if int(x[0])<_cut] or k5[-2:-1] or k5
+            # wick gabungan bar closed TERAKHIR (yang belum pernah dinilai iterasi sebelumnya) utk BE-shift:
+            lastc=closed[-1]
+            last=k5[-1]  # bar forming utk SL/TP realtime & TIME exit (P10 hotfix)
+            h,l=float(lastc[2]),float(lastc[3])
+            fh,fl=float(last[2]),float(last[3])  # bar forming (live) utk trailing ekstrem & hit detection
             side=p['side']
-            # BE shift
-            if not p['be_moved']:
-                if side=='LONG' and h>=p['entry']*(1+BE_TRIG): p['be_moved']=True; p['sl']=p['entry']*(1+BE_OFF)
-                if side=='SHORT' and l<=p['entry']*(1-BE_TRIG): p['be_moved']=True; p['sl']=p['entry']*(1-BE_OFF)
-            hit=None; exit_px=None
-            if side=='LONG':
-                if l<=p['sl']: hit='BE' if p['be_moved'] else 'SL'; exit_px=p['sl']
-                elif h>=p['tp']: hit='TP'; exit_px=p['tp']
+            # === P10b: TRAILING PROFIT LOCK (konsep breakeven asli) ===
+            # ekstrem harga TERCAPAI sepanjang posisi di-update dari bar closed (anti wick-palsu, P10a) + bar forming:
+            # P10b-fix: scan SEMUA bar closed sejak posisi lahir (jangan cuma 1 bar) + bar forming
+            _born=max(int(p['open_ts']),_cut)  # bar sebelum posisi lahir gak boleh dihitung
+            for bx in k5:
+                if int(bx[0])>=_born:
+                    p['hi_px']=max(p.get('hi_px',p['entry']),float(bx[2]))
+                    p['lo_px']=min(p.get('lo_px',p['entry']),float(bx[3]))
+            p['hi_px']=max(p['hi_px'],fh); p['lo_px']=min(p['lo_px'],fl)
+            if TRAIL:
+                mv_top=(p['hi_px']-p['entry'])/p['entry']
+                mv_bot=(p['entry']-p['lo_px'])/p['entry']
+                if side=='LONG' and mv_top>=TRAIL_ACT:
+                    new_sl=p['hi_px']*(1-TRAIL_DIST)
+                    if new_sl>p['sl']: p['sl']=new_sl; p['be_moved']=True
+                elif side=='SHORT' and mv_bot>=TRAIL_ACT:
+                    new_sl=p['lo_px']*(1+TRAIL_DIST)
+                    if new_sl<p['sl']: p['sl']=new_sl; p['be_moved']=True
             else:
-                if h>=p['sl']: hit='BE' if p['be_moved'] else 'SL'; exit_px=p['sl']
-                elif l<=p['tp']: hit='TP'; exit_px=p['tp']
+                # mode BE lama (rollback): geser ke entry+fee — pakai ekstrem SEJAK posisi lahir (P10a)
+                if not p['be_moved'] and now-p['open_ts']>=300000:
+                    if side=='LONG' and p['hi_px']>=p['entry']*(1+BE_TRIG): p['be_moved']=True; p['sl']=p['entry']*(1+BE_OFF)
+                    if side=='SHORT' and p['lo_px']<=p['entry']*(1-BE_TRIG): p['be_moved']=True; p['sl']=p['entry']*(1+BE_OFF)
+            # SL/TP hit detection pakai bar FORMING (live) — SL/TP nyata kena realtime itu benar
+            hit=None; exit_px=None
+            def _lock_label(_sl):
+                mv=( _sl-p['entry'])/p['entry']*(1 if side=='LONG' else -1)
+                if mv>=2*FEE: return 'WIN-LOCK'   # profit beneran terkunci di atas fee
+                if mv>0: return 'LOCK'            # terkunci tapi nyaris fee (jarak trail min)
+                return 'BE' if p['be_moved'] else 'SL'
+            if side=='LONG':
+                if fl<=p['sl']: hit=_lock_label(p['sl']); exit_px=p['sl']
+                elif fh>=p['tp']: hit='TP'; exit_px=p['tp']
+            else:
+                if fh>=p['sl']: hit=_lock_label(p['sl']); exit_px=p['sl']
+                elif fl<=p['tp']: hit='TP'; exit_px=p['tp']
             bars_open=(now-p['open_ts'])/300000
             maxhold=MAXHOLD_CHOP if p.get('regime')=='RANGE' else MAXHOLD
             if hit is None and bars_open>=maxhold: hit='TIME'; exit_px=float(last[4])
@@ -224,7 +271,8 @@ def manage_open(st, k_cache):
                 pnl=100*MARGIN*(mv*LEV-fee*LEV)
                 realized.append({'sym':sym,'hit':hit,'pnl':round(pnl,2),'bars':round(bars_open,1),
                                  'conf':p.get('conf'),'grade':p.get('grade'),'side':side})
-                log({'event':'exit','symbol':sym,'hit':hit,'pnl':pnl,'conf':p.get('conf')})
+                log({'event':'exit','symbol':sym,'hit':hit,'pnl':pnl,'conf':p.get('conf'),
+                     'exit_px':exit_px,'sl':p['sl'],'entry':p['entry'],'hi':p.get('hi_px'),'lo':p.get('lo_px')})
                 st['saldo']=round(st.get('saldo',0)+pnl,2)
                 # cooldown: jangan re-entry pair yg baru exit dalam 30 menit (anti duplikasi)
                 st.setdefault('cooldown',{})[sym]=now+COOLDOWN_MS
@@ -233,7 +281,8 @@ def manage_open(st, k_cache):
                 # poin 2: notifikasi Telegram (win/lose + saldo net + reasoning)
                 reason=last_reason(sym, st)
                 tg.send(tg.fmt_exit({'symbol':sym,'side':p.get('side'),'hit':hit,
-                                     'pnl':pnl,'conf':p.get('conf'),'reason':reason},
+                                     'pnl':pnl,'conf':p.get('conf'),'reason':reason,
+                                     'exit_px':exit_px,'sl':p['sl'],'entry':p['entry']},
                                     st['saldo']))
                 del st['open'][sym]
             else:
@@ -273,6 +322,8 @@ def _iterate_inner(once=False):
     k_cache={}
     # 1) kelola posisi terbuka dulu
     realized=manage_open(st,k_cache)
+    if realized and st.get('full_warned') and len(st['open'])<og.MAX_GLOBAL_POSITIONS:
+        st['full_warned']=False  # slot bebas -> boleh notif penuh lagi nanti
     # 2) kurir: cari kandidat baru di candle TERTUTUP terakhir
     n_open=len(st['open'])
     candidates=[]
@@ -314,9 +365,17 @@ def _iterate_inner(once=False):
                     try: extras=ds.build_extras(sym,kk,rs)
                     except Exception: extras=None
                     brief=ds.build_briefing(sym,grade,side,score,reg,fund,tvv,True,extras=extras,source=src)
+                    # P13 VISION: suntik chart RSI6 + momentum_class + bar detail ke briefing bos
+                    try: brief=ds.enrich_briefing(brief,kk,rs)
+                    except Exception: pass
+                    # P13 KURIR GATE: momen 'kering' (tanpa aliran) dibuang SEBELUM bos — hemat API + anti sinyal sampah
+                    vcls=str(brief.get('vision',{}).get('momentum_class',''))
+                    if vcls=='kering':
+                        log({'event':'skip_dry_momentum','symbol':sym,'side':side,'vol_x':score.get('vol_x')})
+                        continue
                     candidates.append({'sym':sym,'i':i,'side':side,'grade':grade,'key':key,'src':src,
                                        'brief':brief,'entry_next':float(kk[i+1][1]) if i+1<len(kk) else None,
-                                       'regime':reg})
+                                       'regime':reg,'mclass':vcls})
                     done.add(key)
         except Exception as e:
             log({'event':'err','symbol':sym,'msg':str(e)[:80]})
@@ -325,7 +384,18 @@ def _iterate_inner(once=False):
     # 3) bos putuskan (batch, urut grade A dulu)
     candidates.sort(key=lambda x:(x['grade']!='A', x['sym']))
     confirmed=0
+    # GATE HEMAT-API (user): posisi penuh 5/5 -> kurir DILARANG nanya bos LLM. Notif sekali per kejadian.
+    if candidates and n_open>=og.MAX_GLOBAL_POSITIONS:
+        log({'event':'skip_full_position','n_open':n_open,'candidates':len(candidates)})
+        if not st.get('full_warned'):
+            log({'event':'positions_full','msg':'STOP, POSISI MASIH PENUH! TUNGGU SAMPAI ADA POSISI YG CLOSE DULU!',
+                 'n_open':n_open,'candidates':len(candidates)})   # user: cukup di logs, jangan spam TG
+            st['full_warned']=True
     for cd in candidates:
+        if n_open>=og.MAX_GLOBAL_POSITIONS:
+            log({'event':'skip_full_position','symbol':cd['sym'],'side':cd['side'],'grade':cd['grade']})
+            done.discard(cd['key'])  # jangan dikunci done — kalau slot buka lagi, sinyal bisa dinilai ulang
+            continue
         d=llm_call(cd['brief'])
         # P9 NORMALISASI SIDE: kurir ngirim 'L'/'S', seluruh jalur mutasi pakai 'LONG'/'SHORT'.
         # 'L' != 'LONG' bikin SL/TP kebalik (bug BCH 21:51 WIB: LONG kena SL palsu di profit)
@@ -362,10 +432,16 @@ def _iterate_inner(once=False):
         # P1 COOLDOWN di titik mutasi (dulu cuma dicek saat scan): anti re-entry 100 detik pasca-SL
         if int(time.time()*1000) < st.get('cooldown',{}).get(cd['sym'],0):
             log({'event':'skip_cooldown','symbol':cd['sym'],'msg':'cooldown aktif (re-check di mutasi)'}); continue
-        # CHOP SNIPER: regime RANGE = TP 3:1 (cepat), hold pendek; TREND = 4:1, hold panjang
+        # CHOP SNIPER: regime RANGE = TP cepat, hold pendek; TREND = RR panjang
         regime=cd.get('regime','RANGE')
         tp_rr=TP_RR_CHOP if regime=='RANGE' else TP_RR_TREND
-        sl_d=entry*SL_PCT; tp_d=sl_d*tp_rr  # SL % dari harga (proporsional semua coin)
+        sl_pct=SL_PCT
+        # P11: BOS YANG MIKIRIN SL/TP (varian eksekusi dari jev) — guard tetap ketat:
+        variant=str(d.get('variant','')).upper() if isinstance(d,dict) else ''
+        if variant=='TIGHT':   sl_pct, tp_rr = SL_PCT*0.67, 2.5   # momentum jelas: SL 0.8%, TP 1:2.5
+        elif variant=='WIDE':  sl_pct, tp_rr = SL_PCT*1.5, 4.0    # wick besar: SL 1.8%, TP 1:4 (di balik struktur)
+        # NORMAL / tanpa varian = angka engine (SL_PCT & RR regime) — fallback selalu ada
+        sl_d=entry*sl_pct; tp_d=sl_d*tp_rr  # SL % dari harga (proporsional semua coin)
         sl=entry-sl_d if side=='LONG' else entry+sl_d
         tp=entry+tp_d if side=='LONG' else entry-tp_d
         if LIVE:
@@ -393,6 +469,7 @@ def _iterate_inner(once=False):
             continue
         st['open'][cd['sym']]={'side':side,'entry':entry,'sl':sl,'tp':tp,'be_moved':False,
                                'open_ts':int(time.time()*1000),'conf':d.get('confidence'),
+                               'hi_px':entry,'lo_px':entry,
                                'grade':cd['grade'],'regime':regime,'tp_rr':tp_rr}
         confirmed+=1
         reason=d.get('reason','') or d.get('key_factor','')
@@ -493,6 +570,7 @@ if __name__=='__main__':
             saldo0=st0.get('saldo',0)
             mode_tag="🟢 LIVE — ORDER BENERAN" if LIVE else "⚪ DRY RUN — virtual"
             lines=[f"🤖 BOT ONLINE — MODE HYBRID ({mode_tag})","━━━━━━━━━━━━━━━━━━",
+                   f"🧠 Bos: {BOS_PROVIDER.upper()}{' (failover: lightvela)' if BOS_PROVIDER=='jev' else ''}",
                    f"⚙️ SL {SL_PCT*100:.1f}% | TP {TP_RR_TREND:.0f}R trend / {TP_RR_CHOP:.0f}R chop | Margin ${MARGIN*100:.0f} | BE {BE_TRIG*100:.1f}%",
                    "🔁 Scan kontinu 41 pair",
                    "🧠 Kurir: fade + trend pullback | Bos LLM gerbang terakhir",

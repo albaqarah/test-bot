@@ -144,6 +144,11 @@ def gen_scalp(kk, rs, zz, vsma, obv=None):
         body=abs(c[i]-o[i])/rng
         brk_s = volx>2.5 and body>0.6 and c[i]<o[i]
         brk_l = volx>2.5 and body>0.6 and c[i]>o[i]
+        # P12 ANTI-PUCUK GUARD: breakout LONG dilarang kalau RSI(6) sudah lebay (>85) = beli di pucuk
+        # (RUNE 10:00 WIB: candle hijau besar volx 3.64 → LONG, padahal RSI6 97 → langsung dibanting).
+        # Mirror: breakout SHORT dilarang kalau RSI(6) sudah botek (<15) = jual di lembah.
+        brk_l = brk_l and x6<=85
+        brk_s = brk_s and x6>=15
         if (turn_s or brk_s or turn6_s) and not hard_against_s:
             sigs.append((i,'S','A' if volx>=1.5 else 'B'))
         elif (turn_l or brk_l or turn6_l) and not hard_against_l:

@@ -10,6 +10,33 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 
 ---
 
+
+## CHANGELOG v6.2 (24 Sep) - JEV BOS + TRAILING PROFIT LOCK + VISION PACK
+
+### Bos LLM: JEV (TypeSafe jev-1.13)
+- **BOS_PROVIDER=jev** di .env — keputusan typed via OpenRouter Decisions API: 0.3-0.6 dtk, probabilitas per opsi, $0.0000165/keputusan
+- Failover otomatis ke lightvela kalau jev error (`jev_fallback` di log)
+- **P11**: bos pilih varian eksekusi SL/TP per-sinyal: TIGHT (SL 0.8% TP 1:2.5) / NORMAL / WIDE (SL 1.8% TP 1:4, anti-wick) — engine lama tetap fallback
+
+### P10b: Trailing Profit Lock (breakeven asli)
+- SL diam di posisi awal sampai profit >= TRAIL_ACT (0.6%) → kunci puncak − TRAIL_DIST (0.3%) → SL ngikut naik/turun sampai TP
+- Kena balik = **WIN-LOCK** (profit terkunci di atas fee), bukan BE rata -$0.01
+- Toggle `TRAIL=on/off` di .env; BE lama tinggal rollback path (dengan fix arah SHORT + filter bar-born)
+- Audit exit lengkap di log: exit_px/sl/entry/hi/lo
+
+### P12: Anti-pucuk guard
+- Breakout LONG dilarang saat RSI(6) > 85; breakout SHORT dilarang saat RSI(6) < 15 (kasus RUNE 10:00 WIB: breakout beli di RSI6 97)
+
+### P13: Vision Pack (bos & kurir bisa "lihat")
+- Briefing bos + `vision`: RSI(6) realtime + sparkline 12 bar, momentum_class (wick_extreme / momentum_fallback / mean_reversion / breakout / kering), last bar OHLCV
+- Kurir gate: momen `kering` (volx<1.0) dibuang sebelum bos (hemat API)
+- Bukti: replay RUNE 10:00 → dulu CONFIRMED conf 40 (boncos), kini REJECT conf 61 dgn konteks pucuk terbaca
+
+### Infra & notif
+- Gate hemat-api: posisi 5/5 → kurir TIDAK nanya bos (notif cuma di log bot, bukan TG); sinyal tidak dikunci permanen
+- Notif exit: "Exit harga" = harga eksekusi asli (singkron app), PnL selalu bersih fee taker 0.05%×2
+- pm2: dump dibenerin (insiden registry kosong 04:04-06:51 WIB)
+
 ## CHANGELOG PATCH v6.1 (23 Sep malam) - HOTFIX
 
 ### P9 CRITICAL FIX - Side inversion
