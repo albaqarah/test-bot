@@ -417,6 +417,14 @@ def _iterate_inner(once=False):
             done.discard(cd['key'])  # jangan dikunci done — kalau slot buka lagi, sinyal bisa dinilai ulang
             continue
         d=llm_call(cd['brief'])
+        # P17: MIN_CONF gate — conf skrg = p(total CONFIRMED*). Sinyal di bawah ambang = REJECT
+        # (kandidat TIDAK dikunci done — kalau bos nanti lebih yakin di iterasi lain, boleh dinilai ulang)
+        try: _minconf=float(os.environ.get('MIN_CONF','55'))
+        except Exception: _minconf=55.0
+        if d.get('decision')=='CONFIRMED' and float(d.get('confidence',0))<_minconf:
+            d={'decision':'REJECT','confidence':d.get('confidence'),
+               'reason':str(d.get('reason',''))+f" [MIN_CONF gate: {d.get('confidence')} < {_minconf}]",
+               'key_factor':d.get('key_factor')}
         # P9 NORMALISASI SIDE: kurir ngirim 'L'/'S', seluruh jalur mutasi pakai 'LONG'/'SHORT'.
         # 'L' != 'LONG' bikin SL/TP kebalik (bug BCH 21:51 WIB: LONG kena SL palsu di profit)
         _side=cd['side']
