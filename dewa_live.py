@@ -371,6 +371,18 @@ def _iterate_inner(once=False):
                     # P13 VISION: suntik chart RSI6 + momentum_class + bar detail ke briefing bos
                     try: brief=ds.enrich_briefing(brief,kk,rs)
                     except Exception: pass
+                    # P16-C: RSI6 REALTIME — bos harus menilai kondisi yang SAMA dgn layar user.
+                    # Bar closed telad (ARB: kurir lihat RSI6 83.4, user lihat 95.7). Ganti close terakhir
+                    # dgn harga live → RSI6 sintetis "sekarang".
+                    try:
+                        _px=live_px(sym)
+                        if _px:
+                            _c=[float(r[4]) for r in kk[-20:]]
+                            _c[-1]=_px
+                            _r6rt=hr.rsi6(_c)[-1]
+                            brief.setdefault('vision',{})['rsi6_now']=round(_r6rt,1)
+                            brief['vision']['rsi6_source']='realtime'
+                    except Exception: pass
                     # P13 KURIR GATE: momen 'kering' (tanpa aliran) dibuang SEBELUM bos — hemat API + anti sinyal sampah
                     vcls=str(brief.get('vision',{}).get('momentum_class',''))
                     if vcls=='kering':
@@ -419,6 +431,25 @@ def _iterate_inner(once=False):
             log({'event':'retry_later','symbol':cd['sym'],'msg':'llm_err -> kandidat diulang iterasi berikut'})
         save_state(st)  # persist done-list juga (dedup lintas restart)
         if d.get('decision')!='CONFIRMED': continue
+        # P16-B: WICK-EXTREME FLIP — bos dilarang ACC searah wick ekstrem. Kalau sinyal LONG datang
+        # pas RSI6 realtime > 90 (pucuk), bos membalik jadi SHORT (peluang valid fade). Mirror SHORT < 10 → LONG.
+        # (kasus ARB 21:35 WIB: breakout LONG di RSI6 83.4 → nyentuh 95.7 saat entry → langsung dibanting -0.8%)
+        _v=(cd.get('brief') or {}).get('vision',{}) if isinstance(cd.get('brief'),dict) else {}
+        _r6rt=_v.get('rsi6_now'); _mcl=_v.get('momentum_class','')
+        _flipped=False
+        try:
+            _r6f=float(_r6rt) if _r6rt is not None else None
+        except Exception: _r6f=None
+        _old_side=cd['side']
+        if _r6f is not None and _old_side=='LONG' and (_r6f>90 or (_mcl=='wick_extreme' and _r6f>80)):
+            cd['side']='SHORT'; _flipped=True
+        elif _r6f is not None and _old_side=='SHORT' and (_r6f<10 or (_mcl=='wick_extreme' and _r6f<20)):
+            cd['side']='LONG'; _flipped=True
+        if _flipped:
+            reason=(d.get('reason','') or '')+f' [WICK-FLIP: sinyal dibalik — RSI6 realtime {_r6f} ekstrem, arah lama searah wick]'
+            d['reason']=reason
+            log({'event':'wick_flip','symbol':cd['sym'],'rsi6':_r6f,'mclass':_mcl,
+                 'old_side':_old_side,'new_side':cd['side']})
         if n_open+confirmed>=og.MAX_GLOBAL_POSITIONS:
             log({'event':'skip_full','symbol':cd['sym']}); continue
         # P9 RESTRUKTURISASI: hitung entry/side/SL/TP SEBELUM cabang LIVE/dry.
