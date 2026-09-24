@@ -265,6 +265,7 @@ def manage_open(st, k_cache):
                                     st['saldo'])+'\n🟢 MODE LIVE')
                 og.targets.pop(sym, None)   # posisi tutup -> janitor lepas
                 del st['open'][sym]
+                save_state(st)  # P15-FIX: same — del dulu lalu save
                 continue
             if hit:
                 mv=(exit_px-p['entry'])/p['entry']*(1 if side=='LONG' else -1)
@@ -286,8 +287,8 @@ def manage_open(st, k_cache):
                                      'exit_px':exit_px,'sl':p['sl'],'entry':p['entry'],
                                      'bars':round(bars_open,1)},
                                     st['saldo'], n_open=len(st['open'])-1))
-                save_state(st)  # P15: save per exit — saldo gak boleh rollback kalau iterasi kena kill
-                del st['open'][sym]
+                del st['open'][sym]  # P15-FIX: del DULU baru save — dulu save dgn posisi masih open
+                save_state(st)       # → iterasi berikut load posisi balik → exit dobel (bug SUI 4×)
             else:
                 st['open'][sym]=p
         except Exception as e:
