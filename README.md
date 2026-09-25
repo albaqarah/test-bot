@@ -11,6 +11,19 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 ---
 
 
+## CHANGELOG v6.4 (25 Sep) - P17 BOS REASONING + P18 REKAP RESET
+
+### P17: Persona bos di jev + conf diperbaiki + MIN_CONF gate
+- Persona "BOS SNIPER" + framing evaluasi per-source (fade/trend/p6/scalp) dikirim di instructions jev — bos menilai dgn aturan reasoning, bukan acc mentah data kurir
+- `conf` = p(total CONFIRMED*) — apple-to-apple dgn era criteria 2-pilihan (dulu p pilihan menang doang, P11 bikin terpecah 4 varian)
+- `MIN_CONF=55` di .env — CONFIRMED di bawah ambang otomatis REJECT (label `[MIN_CONF gate]` di log, kandidat tidak dikunci)
+- Bukti: fade counter-trend REJECT 0.83; breakout searah CONFIRMED 86; sinyal kering REJECT 1.00
+
+### P18: Rekap reset tiap morning briefing
+- Notif EXIT: `REKAP HARI INI` (bukan 24 jam rolling); ENTRY: `📊 Hari ini ...`
+- Briefing SELALU rekap 24 jam penuh → setelah terkirim, rekap notif mulai 0/0 (marker `.dewa_briefing_mark`)
+- Fallback: tanpa marker → rolling 24 jam (perilaku lama)
+
 ## CHANGELOG v6.3 (24 Sep malam) - TRADFI GATE + NOTIF v15 STYLE
 
 ### P14: TradFi Session Gate (CME hours)
@@ -201,6 +214,9 @@ MAXHOLD_TREND=480     # max hold trend (480 bar = 40 jam)
 MAXHOLD_CHOP=96       # max hold chop (96 bar = 8 jam)
 COOLDOWN_MIN=30       # anti re-entry pair baru exit (menit)
 SCAN_SEC=60           # jeda antar scan idle (detik)
+MIN_CONF=55           # P17: gerbang conf minimum (p total CONFIRMED*); 0 = off
+BOS_PROVIDER=jev      # bos LLM: jev (utama) | lightvela — fallback otomatis ke lightvela
+TRAIL=on              # P10b trailing profit lock
 ```
 > ⚠️ Jangan taruh komentar di belakang angka? Boleh — parser nge-strip `#` otomatis.
 
@@ -233,12 +249,15 @@ nohup python3 dewa_live.py > dewa_run.log 2>&1 &
 </details>
 
 ### 7. Morning briefing otomatis (07:00 WIB)
+Briefing rekap 24 jam penuh → kirim → rekap notif sesudahnya reset 0/0 sampai briefing berikutnya.
 ```bash
 crontab -e
-# tambahkan:
-0 23 * * * cd /path/ke/dewa-bot && set -a && . ./.env && set +a && python3 dewa_live.py --report >> briefing.log 2>&1
+# tambahkan (server UTC: 00:00 UTC = 07:00 WIB):
+0 0 * * * cd /path/ke/dewa-bot && set -a && . ./.env && set +a && python3 dewa_live.py --report >> briefing.log 2>&1
 ```
-(23:00 UTC = 07:00 WIB. `--report` mengirim briefing ke Telegram + stdout.)
+> Cek zona waktu server dulu: `date`. Jika server BUKAN UTC, konversi: 07:00 WIB = 00:00 UTC =
+> 08:00 waktu server UTC+8 (contoh: `0 8 * * * ...`). Salah zona = briefing muncul jam yang salah.
+> `--report` mengirim briefing ke Telegram + stdout (exit code 0 = sukses).
 
 ### 8. Ganti mode DRY ↔ LIVE
 ```bash
