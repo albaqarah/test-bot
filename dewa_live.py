@@ -559,8 +559,8 @@ def report_daily(send_tg=False):
          'pnl_24h':round(pnl,2),'hits':hits,
          'avg_conf':round(sum(confs)/len(confs),1) if confs else 0}
     if send_tg:
-        # P18: marker reset rekap — semua notif mulai ngumpulin dari 0 setelah briefing
-        open('/home/agentuser/.dewa_briefing_mark','w').write(time.strftime('%Y-%m-%dT%H:%M:%S+00:00', time.gmtime()))
+        # P18-fix: marker ditulis SETELAH briefing dihitung & dikirim — briefing selalu
+        # merekap 24 jam penuh, notif sesudahnya mulai dari 0.
         st=load_state()
         # sample reasoning terakhir utk briefing
         sample=[]
@@ -570,6 +570,8 @@ def report_daily(send_tg=False):
                 if e.get('event')=='decision' and len(sample)<3: sample.append(e)
         except Exception: pass
         tg.send(tg.fmt_briefing(rep, st.get('open',{}), sample))
+        # P18-fix: marker SETELAH kirim → notif berikutnya reset 0/0, briefing tetap 24 jam penuh
+        open('/home/agentuser/.dewa_briefing_mark','w').write(time.strftime('%Y-%m-%dT%H:%M:%S+00:00', time.gmtime()))
     return rep
 
 if __name__=='__main__':
