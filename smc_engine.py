@@ -206,3 +206,34 @@ def enrich(sym, btc_bias=None):
 if __name__ == '__main__':
     print(json.dumps(enrich('RUNEUSDT', 'SIDEWAYS'), indent=1))
     print(json.dumps(enrich('XAUUSDT'), indent=1))
+
+
+# ==== P21a: AUDIT TRAIL P1-P8 (faktual dari brief, bukan LLM) ====
+def pipeline_log(brief, dec, conf):
+    """Catat proses P1-P8 faktual tiap evaluasi bos -> dewa_live_log.jsonl via log() caller."""
+    smc_d = brief.get('smc') or brief
+    rsi6 = None
+    v = brief.get('vision') or {}
+    rsi6 = v.get('rsi6_now') or v.get('rsi6_realtime') or brief.get('rsi6_realtime')
+    mf = brief.get('moneyFlow') or '-'
+    if str(brief.get('source','')).lower() in ('xauusdt','xagusdt','xptusdt') or brief.get('dxyBias'):
+        p1 = f"TRADFI {brief.get('symbol','?')} · DXY {brief.get('dxyBias','?')}"
+    else:
+        p1 = f"CRYPTO {brief.get('symbol','?')} · BTC.D {smc_d.get('btcDominance','?')}"
+    try:
+        budget = round(sum(p for k,p in (dec.get('probabilities') or {}).items() if 'CONFIRMED' in k), 2)
+    except Exception:
+        budget = None
+    return {
+        'event': 'pipeline_P1_P8',
+        'P1_asset': p1,
+        'P2_moneyflow': mf if mf != '-' else (brief.get('tradfiMoneyFlow') or smc_d.get('moneyFlow') or '-'),
+        'P3_mss': smc_d.get('mss', 'NONE'),
+        'P4_fvg': f"{smc_d.get('fvg','NONE')} {smc_d.get('fvgRange','') if smc_d.get('fvgRange') else ''}".strip(),
+        'P5_wick': f"rsi6={rsi6}" + (" EXTREME" if isinstance(rsi6,(int,float)) and (rsi6>85 or rsi6<15) else ""),
+        'P6_risk': dec.get('variant') or (max((dec.get('probabilities') or {}).items(), key=lambda x: x[1])[0]
+                     if dec.get('probabilities') else '-'),
+        'P7_budget': budget,
+        'P8_freshness': f"{brief.get('age_min')}m" if brief.get('age_min') is not None else 'live',
+        'decision': dec.get('decision'), 'conf': conf,
+    }

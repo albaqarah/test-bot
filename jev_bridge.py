@@ -49,7 +49,9 @@ PIPELINE WAJIB (urut):
    notional kecil — yang dijaga adalah RISIKO NOMINAL, bukan persentase.
 7. CONFIDENCE BUDGET: skor = keselarasan RSI(20%)+Volume(30%)+Matrix makro/MSS(50%).
    Total p semua CONFIRMED_* < 0.55 = kamu belum yakin -> REJECT (ragu itu skill, bukan kelemahan).
-8. momentum_class 'kering' (volx<1.2) atau sinyal telat >20 menit -> REJECT."""
+8. momentum_class 'kering' (volx<1.2) atau sinyal telat >20 menit -> REJECT.
+   DISIPLIN URUTAN: proses P1 sampai P8 SELALU berurutan — dilarang melompati
+   langkah atau memilih sebelum semua langkah lewat."""
 
 def _framing(brief):
     """Framing per-source (P17): fade/trend/p6 — scalp sudah punya 'evaluasi' sendiri."""

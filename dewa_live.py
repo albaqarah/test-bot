@@ -423,6 +423,12 @@ def _iterate_inner(once=False):
             done.discard(cd['key'])  # jangan dikunci done — kalau slot buka lagi, sinyal bisa dinilai ulang
             continue
         d=llm_call(cd['brief'])
+        # P21a: audit trail P1-P8 faktual (bukan LLM) — jev saja
+        try:
+            if BOS_PROVIDER=='jev':
+                import smc_engine as _smca
+                log(_smca.pipeline_log(cd['brief'], d, d.get('conf')))
+        except Exception: pass
         # P17: MIN_CONF gate — conf skrg = p(total CONFIRMED*). Sinyal di bawah ambang = REJECT
         # (kandidat TIDAK dikunci done — kalau bos nanti lebih yakin di iterasi lain, boleh dinilai ulang)
         try: _minconf=float(os.environ.get('MIN_CONF','55'))
