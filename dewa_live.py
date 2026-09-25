@@ -535,7 +535,7 @@ def _iterate_inner(once=False):
                      'sl':sl,'tp':tp,'sltp':st_sl_tp})
                 reason=d.get('reason','') or d.get('key_factor','')
                 tg.send(tg.fmt_open({'symbol':cd['sym'],'side':side,'grade':cd['grade'],
-                             'entry':entry,'sl':sl,'tp':tp,'tp_rr':tp_rr,
+                             'entry':entry,'sl':sl,'tp':tp,'tp_rr':tp_rr,'qty':qty,
                              'conf':d.get('confidence'),'reason':reason})+'\n🟢 <b>MODE LIVE</b> — order beneran terkirim')
                 confirmed+=1
             except Exception as ex:
@@ -552,6 +552,7 @@ def _iterate_inner(once=False):
         _v=(cd.get('brief') or {}).get('vision',{}) if isinstance(cd.get('brief'),dict) else {}
         tg.send(tg.fmt_open({'symbol':cd['sym'],'side':side,'grade':cd['grade'],
                              'entry':entry,'sl':sl,'tp':tp,'tp_rr':tp_rr,
+                             'qty':round(20.0/entry,6),
                              'conf':d.get('confidence'),'reason':reason,
                              'variant':str(d.get('variant','')).upper(),
                              'regime':regime,'mclass':_v.get('momentum_class'),

@@ -194,7 +194,7 @@ def fmt_open(e):
         + NL + DIV
         + NL + f"🧾 Mode   {_mode_line()}"
         + NL + f"💵 Entry  <code>{e['entry']}</code>"
-        + NL + f"📦 Notional ${notional:.2f} · margin $2.00 ×10"
+        + NL + f"📦 Qty <code>{e.get('qty') if e.get('qty') else round(notional/e['entry'], 6)}</code> · Notional ${notional:.2f} · margin $2.00 ×10"
         + NL + f"🎯 TP     <code>{e['tp']}</code>  {tp_pct:+.2f}% (RR 1:{e.get('tp_rr',3):g})"
         + NL + f"🛡️ SL     <code>{e['sl']}</code>  {sl_pct:+.2f}%{var_txt}"
         + NL + DIV
