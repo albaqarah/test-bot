@@ -384,6 +384,12 @@ def _iterate_inner(once=False):
                             brief.setdefault('vision',{})['rsi6_now']=round(_r6rt,1)
                             brief['vision']['rsi6_source']='realtime'
                     except Exception: pass
+                    # P20: SMC + MONEY-FLOW ENGINE — MSS/FVG/liquidity + BTC.D (crypto) / DXY (TradFi)
+                    try:
+                        import smc_engine as _smc
+                        _smcd=_smc.enrich(sym, brief.get('btc_bias'))
+                        brief.update(_smcd)
+                    except Exception: pass
                     # P13 KURIR GATE: momen 'kering' (tanpa aliran) dibuang SEBELUM bos — hemat API + anti sinyal sampah
                     vcls=str(brief.get('vision',{}).get('momentum_class',''))
                     if vcls=='kering':
@@ -536,7 +542,10 @@ def _iterate_inner(once=False):
                 reason=d.get('reason','') or d.get('key_factor','')
                 tg.send(tg.fmt_open({'symbol':cd['sym'],'side':side,'grade':cd['grade'],
                              'entry':entry,'sl':sl,'tp':tp,'tp_rr':tp_rr,'qty':qty,
-                             'conf':d.get('confidence'),'reason':reason})+'\n🟢 <b>MODE LIVE</b> — order beneran terkirim')
+                             'conf':d.get('confidence'),'reason':reason,
+                             'mf':(cd.get('brief') or {}).get('moneyFlow') or (cd.get('brief') or {}).get('tradfiMoneyFlow'),
+                             'mss':(cd.get('brief') or {}).get('mss'),
+                             'fvg':(cd.get('brief') or {}).get('fvgStatus')})+'\n🟢 <b>MODE LIVE</b> — order beneran terkirim')
                 confirmed+=1
             except Exception as ex:
                 log({'event':'LIVE_ERR','symbol':cd['sym'],'msg':str(ex)[:120]})
@@ -555,6 +564,9 @@ def _iterate_inner(once=False):
                              'qty':round(20.0/entry,6),
                              'conf':d.get('confidence'),'reason':reason,
                              'variant':str(d.get('variant','')).upper(),
+                             'mf':(cd.get('brief') or {}).get('moneyFlow') or (cd.get('brief') or {}).get('tradfiMoneyFlow'),
+                             'mss':(cd.get('brief') or {}).get('mss'),
+                             'fvg':(cd.get('brief') or {}).get('fvgStatus'),
                              'regime':regime,'mclass':_v.get('momentum_class'),
                              'rsi6':_v.get('rsi6_now'),
                              'n_open':len(st['open']),'saldo':st.get('saldo',0)}))

@@ -189,6 +189,13 @@ def fmt_open(e):
     mom=""
     if e.get('mclass') or e.get('rsi6') is not None:
         mom=NL+f"🧭 Momentum {e.get('mclass','?')} · RSI6 {e.get('rsi6','?')}"
+    smc=""
+    if e.get('mf') or e.get('mss') or e.get('fvg'):
+        parts=[]
+        if e.get('mf'): parts.append(f"🛰️ {e['mf']}")
+        if e.get('mss') and e['mss']!='NONE': parts.append("MSS "+str(e['mss']).replace('MSS_','').replace('_',' '))
+        if e.get('fvg') and e['fvg']!='NONE': parts.append(f"FVG {e['fvg']}")
+        if parts: smc=NL+' · '.join(parts)
     r=_resume24()
     return ("🚀 <b>ENTRY</b> · "+e['symbol']+" · "+SIDE_ART.get(side,'')+f" <b>{side}</b>"
         + NL + DIV
@@ -202,7 +209,7 @@ def fmt_open(e):
         + NL + f"🧠 Bos conf: {conf}/100"
         + NL + _bos_line().replace('🤖 ','🤖 ')
         + NL + f"🧠  <i>{e.get('reason','')}</i>"
-        + mom
+        + mom + smc
         + NL + DIV
         + NL + f"🎟️ Slot {e.get('n_open','?')}/5 · {_equity(e.get('saldo',0)).replace('💰 Ekuitas   ','💰 Ekuitas ')}"
         + NL + f"📊 Hari ini {r['w']}W/{r['l']}L · WR {_wr(r):.1f}% · Net {r['net']:+.2f}"
