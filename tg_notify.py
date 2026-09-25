@@ -75,13 +75,21 @@ def _pf(resume):
     gl=resume.get('gross_loss',0)
     return resume.get('gross_win',0)/gl if gl>0 else (float('inf') if resume.get('gross_win') else 0.0)
 
+_BRIEF_MARK='/home/agentuser/.dewa_briefing_mark'
+def _briefing_cutoff():
+    """Cutoff rekap: sejak morning briefing terakhir (reset 0/0 tiap briefing)."""
+    import os as _os
+    try: return _os.path.getmtime(_BRIEF_MARK)
+    except Exception: return None
+
 def _resume24():
-    """Rekap 24 jam dari log asli — dipakai semua notif."""
+    """Rekap periode sejak morning briefing terakhir (fallback 24 jam rolling) — dipakai semua notif."""
     import time as _time
     out={'w':0,'l':0,'gross_win':0.0,'gross_loss':0.0,'fee':0.0,'net':0.0,'best':None,'worst':None}
     per={}
     try:
-        cutoff=(_time.time()-86400)*1
+        _bm=_briefing_cutoff()
+        cutoff=_bm if _bm else (_time.time()-86400)
         for line in open('/home/agentuser/dewa_live_log.jsonl'):
             try: d=json.loads(line)
             except Exception: continue
@@ -91,7 +99,7 @@ def _resume24():
                 from datetime import datetime as _dt
                 t=_dt.fromisoformat(ts.replace('+00:00','+00:00')).timestamp()
             except Exception: continue
-            if t < _time.time()-86400: continue
+            if t < cutoff: continue
             pnl=d.get('pnl',0)
             out['fee']+=0.02  # fee roundtrip sim per trade (2×0.05% × notional $20)
             if pnl>0.02: out['w']+=1; out['gross_win']+=pnl+0.02
@@ -197,7 +205,7 @@ def fmt_open(e):
         + mom
         + NL + DIV
         + NL + f"🎟️ Slot {e.get('n_open','?')}/5 · {_equity(e.get('saldo',0)).replace('💰 Ekuitas   ','💰 Ekuitas ')}"
-        + NL + f"📊 24h {r['w']}W/{r['l']}L · WR {_wr(r):.1f}% · Net {r['net']:+.2f}"
+        + NL + f"📊 Hari ini {r['w']}W/{r['l']}L · WR {_wr(r):.1f}% · Net {r['net']:+.2f}"
         + NL + "⏰ "+_wib_now())
 
 # ---------- TRAIL LOCK ----------
@@ -238,7 +246,7 @@ def fmt_exit(e, saldo, n_open=None):
         f"🧾 Fee          -{fee:.3f} USDT",
         f"💰 NET        {_fmt_usd(pnl)}",
         DIV,
-        "📉 REKAP 24 JAM",
+        "📉 REKAP HARI INI",
         f"├ W/L      {r['w']}W / {r['l']}L",
         f"├ Win rate {_wr(r):.1f}%",
         f"└ Net      {_fmt_usd(r['net'])}",

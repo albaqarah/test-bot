@@ -559,6 +559,8 @@ def report_daily(send_tg=False):
          'pnl_24h':round(pnl,2),'hits':hits,
          'avg_conf':round(sum(confs)/len(confs),1) if confs else 0}
     if send_tg:
+        # P18: marker reset rekap — semua notif mulai ngumpulin dari 0 setelah briefing
+        open('/home/agentuser/.dewa_briefing_mark','w').write(time.strftime('%Y-%m-%dT%H:%M:%S+00:00', time.gmtime()))
         st=load_state()
         # sample reasoning terakhir utk briefing
         sample=[]
