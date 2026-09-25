@@ -487,6 +487,33 @@ def _iterate_inner(once=False):
         variant=str(d.get('variant','')).upper() if isinstance(d,dict) else ''
         if variant=='TIGHT':   sl_pct, tp_rr = SL_PCT*0.67, 2.5   # momentum jelas: SL 0.8%, TP 1:2.5
         elif variant=='WIDE':  sl_pct, tp_rr = SL_PCT*1.5, 4.0    # wick besar: SL 1.8%, TP 1:4 (di balik struktur)
+        # P19 RANGE-POSITION GUARD: SL yang jatuh DI DALAM range 6 jam (72 bar) gampang kena noise/wick.
+        # Kasus RUNE 25 Sep 08:01 WIB: LONG @0.6402, SL 1.2% = 0.6325 — cuma 0.06% di atas low range
+        # 0.6319 → wick ke low range aja cukup memotong (dan benar terjadi). Solusi: kalau level SL
+        # berada di dalam range → SL dipaksa WIDE (1.8%) sampai keluar dr tepi range. Best-effort.
+        try:
+            _kc=k_cache.get(cd['sym']) or []
+            if len(_kc)<73:
+                _hi=_lo=None
+            else:
+                _hi=max(float(b[2]) for b in _kc[-72:]); _lo=min(float(b[3]) for b in _kc[-72:])
+            if _hi>_lo:
+                _pos=(entry-_lo)/(_hi-_lo)
+                # SL efektif berada DI DALAM range = pasti bisa kena noise range biasa (kasus RUNE:
+                # SL 0.6325 > low 0.6319 — cukup wick ke low range untuk memotong).
+                _sl_in_range = entry*(1-SL_PCT) > _lo if side=='LONG' else entry*(1+SL_PCT) < _hi
+                if side=='LONG' and _sl_in_range and variant!='WIDE':
+                    sl_pct, tp_rr = SL_PCT*1.5, 4.0
+                    log({'event':'range_guard_wide','symbol':cd['sym'],'side':side,
+                         'pos_in_range':round(_pos,2),'range_hi':_hi,'range_lo':_lo,
+                         'msg':'LONG deket resistance 6-jam — SL di-WIDE-in'})
+                elif side=='SHORT' and entry*(1+SL_PCT) < _hi and variant!='WIDE':
+                    sl_pct, tp_rr = SL_PCT*1.5, 4.0
+                    log({'event':'range_guard_wide','symbol':cd['sym'],'side':side,
+                         'pos_in_range':round(_pos,2),'range_hi':_hi,'range_lo':_lo,
+                         'msg':'SHORT deket support 6-jam — SL di-WIDE-in'})
+        except Exception:
+            pass  # guard best-effort; kag gagal = perilaku lama
         # NORMAL / tanpa varian = angka engine (SL_PCT & RR regime) — fallback selalu ada
         sl_d=entry*sl_pct; tp_d=sl_d*tp_rr  # SL % dari harga (proporsional semua coin)
         sl=entry-sl_d if side=='LONG' else entry+sl_d
