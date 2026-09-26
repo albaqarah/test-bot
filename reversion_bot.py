@@ -168,3 +168,15 @@ if __name__=='__main__':
     out={'rows':{s:{'regime':reg,'sigs':n,'IS':r['IS'],'OOS':r['OOS']} for s,reg,n,r in rows},
          'totals':{'IS_pnl':round(is_pnl,2),'OOS_pnl':round(oos_pnl,2)}}
     json.dump(out, open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'reversion_results.json'),'w'), indent=1)
+
+
+def rsi6(c, n=6):
+    """RSI cepat ala layar scalper (Wilder) — P29: pengganti RSI14 di seluruh pipeline."""
+    out=[None]*len(c); g=l2=0.0
+    for i in range(1,n+1):
+        dd=c[i]-c[i-1]; g+=max(dd,0); l2+=max(-dd,0)
+    ag,al=g/n,l2/n; out[n]=100-100/(1+ag/al) if al else 100.0
+    for i in range(n+1,len(c)):
+        dd=c[i]-c[i-1]; ag=(ag*(n-1)+max(dd,0))/n; al=(al*(n-1)+max(-dd,0))/n
+        out[i]=100-100/(1+ag/al) if al else 100.0
+    return out

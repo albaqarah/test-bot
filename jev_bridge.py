@@ -40,19 +40,27 @@ PIPELINE WAJIB (urut):
    boleh CONFIRMED dgn WIDE/atau REJECT-await-retrace — pilih yg probabilitasnya lebih tinggi).
    fvgStatus=NONE bukan larangan — cuma kurangi bobot keyakinan (harga pasar langsung boleh, kalau
    momentum & money-flow kuat).
-)+ Momentum Battery: briefing membawa momentumBattery {battery: FULL/MID/LOW, pct, vol_ratio, room_pct} —
+4½. ANTI-TELAT (P28): briefing membawa room_pct (sisa ruang gerak searah sinyal) — kalau room_pct < 25%
+   (SHORT pas harga sudah di lembah / LONG pas harga sudah di pucuk), momentum itu sudah SELESAI — entry telat.
+   Wajib REJECT-await meskipun MSS sudah berbalik (konfirmasi struktur selalu tertinggal 1-3 bar).
+   Entry berkualitas = sisi AWAL gerakan: room_pct >= 25%.
+5. WICK EXTREME: JANGAN counter wick buta (bekas kepala SL). Fade wick butuh makro searah (BTC.D/DXY) — TAPI jika
+   makro + MSS searah breakout sah, wick ekstrem setelah liquidity sweep = manipulasi: jangan counter-trend
+   mentah-mentah; kalau makro kuat boleh CONFIRMED (prefer WIDE). Entry searah wick TANPA MSS & tanpa
+   konfirmasi momentum = REJECT.
+5¼. REVERSAL HINT (P29): briefing membawa reversalHint {SHORT/LONG/NONE} + reversalWhy — kompas KURIR:
+   hint SHORT = harga di pucuk 24h (>90% range, gerakan naik kencang) → sinyal SHORT saat itu = FADE-REVERSAL MATANG,
+   boleh CONFIRMED (prefer WIDE — SL di atas pucuk). hint LONG = lembah matang → sinyal LONG = beli murah valid.
+   Fade-reversal TANPA hint searah & tanpa ekstrem terukur = counter-trend buta = REJECT.
+5½. MOMENTUM BATTERY: briefing membawa momentumBattery {battery: FULL/MID/LOW, pct, vol_ratio, room_pct} —
    sisa BENSIN gerakan: vol_ratio rendah (<0.8x) = volume kehabisan; room kecil = ruang gerak tinggal sedikit.
    battery LOW + entry BUKAN di FVG/reversal -> REJECT-await (sinyal basi, momentum udah gak ada).
    battery LOW tapi entry tepat di FVG/mitigated -> masih boleh CONFIRMED (reversal valid).
    battery FULL/MID -> normal. Berlaku SEMUA aset (crypto & logam/PAXG).
-5. WICK EXTREME5. WICK EXTREME & LIQUIDITY: rsi6Realtime>90 = hanya berpikir SHORT (mirror <10 = LONG) — TAPI jika
-   makro + MSS searah breakout sah, wick ekstrem setelah liquidity sweep = manipulasi: jangan counter-trend
-   mentah-mentah; kalau makro kuat boleh CONFIRMED (prefer WIDE). Entry searah wick TANPA MSS & tanpa
-   konfirmasi momentum = REJECT.
 6. KONTRAK SL/TP (Dynamic Risk): SL 0.8% (TIGHT) dilarang saat volatilitas/wick besar. Hitung jarak aman
    dari ujung wick terdekat & struktur MSS; pilih WIDE dgn TP 1:4 kalau wick kejam. Lebar SL tetap aman krn
    notional kecil — yang dijaga adalah RISIKO NOMINAL, bukan persentase.
-7. CONFIDENCE BUDGET: skor = keselarasan RSI(20%)+Volume(30%)+Matrix makro/MSS(50%).
+7. CONFIDENCE BUDGET: skor = keselarasan RSI6(20%)+Volume(30%)+Matrix makro/MSS(50%).
    Total p semua CONFIRMED_* < 0.55 = kamu belum yakin -> REJECT (ragu itu skill, bukan kelemahan).
 8. momentum_class 'kering' (volx<1.2) atau sinyal telat >20 menit -> REJECT.
    DISIPLIN URUTAN: proses P1 sampai P8 SELALU berurutan — dilarang melompati

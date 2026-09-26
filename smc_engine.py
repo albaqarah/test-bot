@@ -263,12 +263,42 @@ def momentum_battery(k, side=None):
         rng=hi48-lo48
         room_up=(hi48-px)/rng if rng>0 else 0.5
         room_dn=(px-lo48)/rng if rng>0 else 0.5
-        if side=='LONG': room=room_up
-        elif side=='SHORT': room=room_dn
-        else: room=max(room_up,room_dn)
-        pct=round((0.5*vol_score+0.5*room)*100)
+        if side=='LONG': room=room_up; pos_in=room_up
+        elif side=='SHORT': room=room_dn; pos_in=room_dn
+        else: room=max(room_up,room_dn); pos_in=room
+        pct=round((0.4*vol_score+0.6*room)*100)
+        # P28 anti-telat: entry nyangkut di ujung gerakan (room <25%) dgn vol tinggi = JEBAKAN chase — cap di MID (bukan FULL)
+        if pos_in<0.25 and pct>=60: pct=55
         bat='FULL' if pct>=60 else ('LOW' if pct<30 else 'MID')
         return {'battery':bat,'pct':pct,'vol_ratio':round(vol_ratio,2),
                 'room_pct':round(room*100,1)}
     except Exception as e:
         return {'battery':'MID','pct':50,'vol_ratio':None,'room_pct':None,'err':str(e)[:60]}
+
+
+# ==== P29: REVERSAL HINT — kompas arah ekstrem (permintaan user) ====
+def reversal_hint(k):
+    """Baca momentum murni (tanpa sinyal): gerakan UP kuat & extended = hint SHORT (pucuk matang);
+    gerakan DOWN kuat & extended = hint LONG (lembah matang). Return dict hint utk briefing."""
+    try:
+        c=[float(x[4]) for x in k]; h=[float(x[2]) for x in k]
+        l=[float(x[3]) for x in k]; v=[float(x[5]) for x in k]
+        n=len(c)
+        if n<25: return {'reversalHint':'NONE'}
+        vavg=sum(v[-23:-3])/20
+        vlast=sum(v[-3:])/3
+        vol_ratio=vlast/vavg if vavg else 1.0
+        n48=min(n,289)                    # window 24 jam (288 bar 5m) — match layar user (24h hi/lo)
+        hi48=max(h[-n48:]); lo48=min(l[-n48:]); px=c[-1]
+        rng=hi48-lo48
+        if rng<=0: return {'reversalHint':'NONE'}
+        pos_in=(px-lo48)/rng              # 0=di lembah, 1=di pucuk
+        move12=(px/c[-13]-1)*100          # gerakan 1 jam terakhir %
+        hot=vol_ratio>=1.5 or abs(move12)>=1.5
+        if pos_in>=0.90 and move12>=0 and hot:
+            return {'reversalHint':'SHORT','reversalWhy':f'pucuk matang: pos {pos_in*100:.0f}% dari 24h-range, gerak 1j {move12:+.1f}%, vol {vol_ratio:.1f}x'}
+        if pos_in<=0.10 and move12<=0 and hot:
+            return {'reversalHint':'LONG','reversalWhy':f'lembah matang: pos {pos_in*100:.0f}% dari 24h-range, gerak 1j {move12:+.1f}%, vol {vol_ratio:.1f}x'}
+        return {'reversalHint':'NONE'}
+    except Exception:
+        return {'reversalHint':'NONE'}
