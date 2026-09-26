@@ -389,6 +389,7 @@ def _iterate_inner(once=False):
                 if i>=len(kk)-24:
                     key=(sym,kk[i][0],side)
                     if key in done: continue
+                    if int(time.time()*1000)<st.get('reject_cd',{}).get(sym+':'+side,0): continue
                     if sym in st['open']: continue
                     if int(time.time()*1000)<st.get('cooldown',{}).get(sym,0): continue
                     o,h,l,cl=(kk[i][j] for j in (1,2,3,4))
@@ -495,6 +496,10 @@ def _iterate_inner(once=False):
             st['done']=[list(k) for k in list(done)[-600:]]
             log({'event':'retry_later','symbol':cd['sym'],'msg':'llm_err -> kandidat diulang iterasi berikut'})
         save_state(st)  # persist done-list juga (dedup lintas restart)
+        # P30 REJECT-COOLDOWN: REJECT = jangan tanya bos utk (sym,side) yg sama dlm 15 menit — hemat API jev
+        # (kasus P29: ATOM SHORT ditanya 40x/2jam = 44% budget jev terbuang utk jawaban sama)
+        if d.get('decision')=='REJECT':
+            st.setdefault('reject_cd',{})[cd['sym']+':'+cd['side']]=time.time()*1000+15*60*1000
         if d.get('decision')!='CONFIRMED': continue
         # P16-B: WICK-EXTREME FLIP — bos dilarang ACC searah wick ekstrem. Kalau sinyal LONG datang
         # pas RSI6 realtime > 90 (pucuk), bos membalik jadi SHORT (peluang valid fade). Mirror SHORT < 10 → LONG.
