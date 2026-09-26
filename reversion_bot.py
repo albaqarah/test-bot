@@ -34,19 +34,6 @@ PAIRS=['BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','XRPUSDT','DOGEUSDT','ADAUSDT','A
        'AAVEUSDT','UNIUSDT','FETUSDT','GALAUSDT','CRVUSDT','LDOUSDT','ARBUSDT','OPUSDT',
        'ATOMUSDT','FILUSDT','INJUSDT','SEIUSDT','TRXUSDT','PAXGUSDT','XAUUSDT','XAGUSDT','XPTUSDT']
 
-def rsi(closes, n=14):
-    out=[None]*len(closes)
-    g=l=0.0
-    for i in range(1,n+1):
-        d=closes[i]-closes[i-1]
-        g+=max(d,0); l+=max(-d,0)
-    ag,al=g/n,l/n
-    out[n]=100-100/(1+ag/al) if al else 100.0
-    for i in range(n+1,len(closes)):
-        d=closes[i]-closes[i-1]
-        ag=(ag*(n-1)+max(d,0))/n; al=(al*(n-1)+max(-d,0))/n
-        out[i]=100-100/(1+ag/al) if al else 100.0
-    return out
 
 def ema_series(vals,n):
     k=2/(n+1); out=[vals[0]]
@@ -171,7 +158,7 @@ if __name__=='__main__':
 
 
 def rsi6(c, n=6):
-    """RSI cepat ala layar scalper (Wilder) — P29: pengganti RSI14 di seluruh pipeline."""
+    """RSI cepat ala layar scalper (Wilder) — P29: satu-satunya RSI di pipeline."""
     out=[None]*len(c); g=l2=0.0
     for i in range(1,n+1):
         dd=c[i]-c[i-1]; g+=max(dd,0); l2+=max(-dd,0)

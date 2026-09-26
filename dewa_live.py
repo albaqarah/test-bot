@@ -370,7 +370,7 @@ def _iterate_inner(once=False):
             k_cache[sym]=k5
             kk=[[int(x[0]),float(x[1]),float(x[2]),float(x[3]),float(x[4]),float(x[5])] for x in k5]
             c=[r[4] for r in kk]; v=[r[5] for r in kk]
-            rs=rb.rsi6(c) if hasattr(rb,'rsi6') else rb.rsi(c,6)   # P29: RSI6 TOTAL (user) — RSI14 dihapus dari seluruh pipeline
+            rs=rb.rsi6(c)   # P29: RSI6 TOTAL - satu-satunya RSI di pipeline
             zz=rb.zscore(c)
             vsma=[0.0]*len(v)
             for i in range(20,len(v)): vsma[i]=sum(v[i-20:i])/20

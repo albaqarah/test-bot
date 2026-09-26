@@ -66,7 +66,7 @@ side: arah fade yang diusulkan (LONG=beli lembah, SHORT=jual pucuk)
 score.imb: dominasi wick (-1..1; untuk LONG harus negatif = ekor bawah)
 score.vol_x: volume / SMA20 (>1.5 = climax)
 score.z: z-score harga vs 200 bar (ekstrem = >1.5)
-score.rsi: RSI14 5m
+score.rsi: RSI6 5m (P29)
 funding: funding rate terakhir (negatif = short bayar long = kerumunan short)
 regime: struktur 1h (TREND_UP/TREND_DOWN/RANGE)
 tv: EMA10/20/50 + RSI di 5m/15m/1h dari TradingView (multi-TF confluence)
@@ -117,9 +117,9 @@ def kdj(kk, n=9):
         K=2/3*K+1/3*rsv; D=2/3*D+1/3*K; J=3*K-2*D
     return round(K,1), round(D,1), round(J,1)
 
-def stoch_rsi(rs, n=14):
-    w=[x for x in rs[-n:] if x is not None]
-    if len(w)<n: return None
+def stoch_rsi(rs, window=14):
+    w=[x for x in rs[-window:] if x is not None]
+    if len(w)<window: return None
     lo,hi=min(w),max(w)
     return round((rs[-1]-lo)/(hi-lo)*100,1) if hi>lo else 50.0
 

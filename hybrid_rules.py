@@ -105,7 +105,7 @@ def rsi6(c, n=6):
 def gen_scalp(kk, rs, zz, vsma, obv=None):
     """P8 REV — kurir momentum scalper:
        Trigger (salah satu):
-         1) stoch_rsi(RSI14) belok dari ekstrem (>80 turun = SHORT / <20 naik = LONG)
+         1) stochRSI(window 14 bar, dibangun dari RSI6) belok dari ekstrem (>80 turun = SHORT / <20 naik = LONG)
          2) RSI(6) belok dari ekstrem (>80 turun / <20 naik) — persis layar scalper (pucuk BTC 20:44: RSI6 84)
          3) breakout: volx>2.5 + body>60% range searah
        Konfirmasi: volx>=1.2. OBV = SOFT-VETO: nolak hanya jika OBV 10-bar MELAWAN KERAS
@@ -156,11 +156,11 @@ def gen_scalp(kk, rs, zz, vsma, obv=None):
             sigs.append((i,'L','A' if volx>=1.5 else 'B'))
     return sigs
 
-def _stoch_from_rsi(rs, n=14):
+def _stoch_from_rsi(rs, window=14):
     out=[None]*len(rs)
-    for i in range(n,len(rs)):
-        w=[x for x in rs[i-n+1:i+1] if x is not None]
-        if len(w)<n: continue
+    for i in range(window,len(rs)):
+        w=[x for x in rs[i-window+1:i+1] if x is not None]
+        if len(w)<window: continue
         hi,lo=max(w),min(w)
         out[i]=100*(rs[i]-lo)/(hi-lo) if hi>lo else 50.0
     return out
