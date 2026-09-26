@@ -6,10 +6,21 @@ Bot trading futures Binance TF 5m: **algoritma matematika = kurir** sinyal grade
 
 Fitur: notifikasi Telegram per entry/exit (win/lose + saldo net + reasoning bos LLM),
 cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
-**switch MODE dry/live**, **auto-restart supervisor**, anti-hang & anti-race.
+**switch MODE dry/live**, **auto-restart pm2**, anti-hang & anti-race.
 
 ---
 
+
+## CHANGELOG v6.5 (26 Sep) - P20-P23 TYPESAFE SNIPER v3.5 + TRADFI FORCE-FLAT + EKUITAS REAL
+- P20: persona TYPESAFE SNIPER v3.5 (money-flow matrix BTC.D/DXY, MSS, FVG, liquidity) + smc_engine.py baru;
+  briefing bos kaya data SMC; baris notif 🛰️ MONEY-FLOW · MSS · FVG; Qty di notif entry
+- P21: audit trail pipeline P1-P8 (faktual, per keputusan bos) + baris 🧠 P1→P8 di notif + disiplin urutan di persona
+- P22: EKUITAS REAL — MODE=live membaca saldo wallet USDT futures Binance asli (cache 20s, label LIVE·wallet;
+  fallback jujur LIVE·sim! kalau API gagal). MODE=dry tetap saldo virtual
+- P23: TRADFI FORCE-FLAT — blok entry logam/PAXG 3 jam sebelum break/close CME (14:00 ET), force-close posisi
+  terbuka 2 jam sebelum close (16:00 ET, alasan TRADFI_EOD), MAXHOLD TradFi 4 jam — anti nyangkut di market kopong
+- P24/P25: briefing jam 07:00 WIB tunggal (crontab) + briefing kirim saldo asli (bukan $0.00)
+- Bersih-bersih: kode lama (dewa_dryrun, dewa_v3, reversion_dewa, supervisor lama) dihapus dari repo
 
 ## CHANGELOG v6.4 (25 Sep) - P17 BOS REASONING + P18 REKAP RESET
 
@@ -140,7 +151,7 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 | **File-lock anti-race** | `fcntl` lock: cuma 1 proses boleh mutasi state. Watchdog/cron jadi fallback-only (`skipped: locked_by_other_process`) |
 | **Done-set dedup** | Kandidat unik per (pair, bar, side) — zombie repeat 17-40× fixed |
 | **Cooldown 30 menit/pair** | Anti re-entry langsung setelah exit (config: COOLDOWN_MIN) |
-| **Anti-hang lengkap** | Timeout 8s semua fetch + kill-switch timer (exit 99) + `dewa_supervisor.sh` auto-restart 5s. Postmortem: fundingRate urlopen tanpa timeout = TCP nyangkut 7 jam |
+| **Anti-hang lengkap** | Timeout 8s semua fetch + kill-switch timer (exit 99) + pm2 auto-restart. Postmortem: fundingRate urlopen tanpa timeout = TCP nyangkut 7 jam |
 | **LLM anti-reasoning-burn** | Instruksi "langsung JSON" — reasoning model gak lagi makan max_tokens buat thinking (no_json_in_response massal fixed); retry 2× + backoff |
 | **save_state per keputusan** | Kill di tengah iterasi gak lagi bikin keputusan hilang/diulang |
 | **tg.send retry 3×** | Notif gak hilang senyap (kasus TRX SL tanpa notif); kegagalan dicatat |
@@ -240,13 +251,7 @@ pm2 stop dewa-live          # stop
 ```
 Catatan: bot punya watchdog internal (self-kill exit 99 bila iterasi >900s) — pm2 otomatis respawn.
 
-<details><summary>Alternatif lama: nohup + supervisor script</summary>
-```bash
-setsid nohup ./dewa_supervisor.sh > /dev/null 2>&1 &
-# atau manual:
-nohup python3 dewa_live.py > dewa_run.log 2>&1 &
-```
-</details>
+
 
 ### 7. Morning briefing otomatis (07:00 WIB)
 Briefing rekap 24 jam penuh → kirim → rekap notif sesudahnya reset 0/0 sampai briefing berikutnya.

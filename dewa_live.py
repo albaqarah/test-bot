@@ -197,6 +197,36 @@ def manage_open(st, k_cache):
     now=int(time.time()*1000)
     for sym in list(st['open'].keys()):
         p=st['open'][sym]
+        # === P23: TRADFI FORCE-FLAT — posisi logam/PAXG dipaksa cair 2 jam sebelum break/close ===
+        if sym in tfs.TRADFI:
+            try:
+                _eb,_ff,_why=tfs.tradfi_window()
+                if _ff:
+                    if p.get('tradfi_eod_done'):   # P23 anti-dobel (race restart)
+                        continue
+                    p['tradfi_eod_done']=True
+                    exit_px=live_px(sym) or p['entry']
+                    qty=p.get('qty') or 20.0/p['entry']
+                    side=p['side']
+                    pnl=(exit_px-p['entry'])*qty*(1 if side=='LONG' else -1)
+                    pnl=round(pnl-0.02,2)  # fee taker
+                    st['saldo']=round(st.get('saldo',0)+pnl,2)
+                    log({'event':'exit','symbol':sym,'hit':'TRADFI_EOD','pnl':pnl,'conf':p.get('conf'),
+                         'live':True,'reason':f'force-flat {_why}'})
+                    tg.send(tg.fmt_exit({'symbol':sym,'side':side,'hit':'TIME',
+                                         'pnl':pnl,'conf':p.get('conf'),
+                                         'reason':f'tradfi_eod ({_why})','entry':p['entry'],
+                                         'exit_px':exit_px,'bars':round((now-int(p["open_ts"]))/300000)},
+                                        st['saldo'], n_open=len(st['open'])-1))
+                    og.targets.pop(sym,None)
+                    del st['open'][sym]   # urutan suci: del -> save
+                    save_state(st)
+                    st.setdefault('cooldown',{})[sym]=now+COOLDOWN_MS
+                    realized.append({'sym':sym,'hit':'TRADFI_EOD','pnl':pnl,'bars':0,
+                                     'conf':p.get('conf'),'grade':p.get('grade'),'side':side})
+                    continue
+            except Exception as _e:
+                log({'event':'tradfi_ff_err','msg':str(_e)[:80]})
         try:
             k5=k_cache.get(sym) or vg.fetch_hist_klines(sym,'5m',4)
             k_cache[sym]=k5
@@ -248,6 +278,7 @@ def manage_open(st, k_cache):
                 elif fl<=p['tp']: hit='TP'; exit_px=p['tp']
             bars_open=(now-p['open_ts'])/300000
             maxhold=MAXHOLD_CHOP if p.get('regime')=='RANGE' else MAXHOLD
+            if sym in tfs.TRADFI: maxhold=min(maxhold,48)  # P23: TradFi max 4 jam — jangan nahan floating dlm market tipis
             if hit is None and bars_open>=maxhold: hit='TIME'; exit_px=float(last[4])
             if hit and LIVE:
                 # posisi nyata: SL/TP di exchange yang nutup — bot tinggal notif PnL nyata dari kalkulasi
@@ -395,10 +426,12 @@ def _iterate_inner(once=False):
                     if vcls=='kering':
                         log({'event':'skip_dry_momentum','symbol':sym,'side':side,'vol_x':score.get('vol_x')})
                         continue
-                    # P14 TRADFI GATE: XAU/XAG/XPT/PAXG entry HANYA saat CME session OPEN (persis v15)
-                    if sym in tfs.TRADFI and not tfs.tradfi_open():
-                        log({'event':'skip_tradfi_closed','symbol':sym,'side':side,'session':tfs.tradfi_label()[0]})
-                        continue
+                    # P14 TRADFI GATE + P23 WINDOW: blok entry 3 jam sebelum break/close (anti volume kopong + irit API bos)
+                    if sym in tfs.TRADFI:
+                        _eb,_ff,_why=tfs.tradfi_window()
+                        if _eb:
+                            log({'event':'skip_tradfi_window','symbol':sym,'side':side,'window':_why})
+                            continue
                     candidates.append({'sym':sym,'i':i,'side':side,'grade':grade,'key':key,'src':src,
                                        'brief':brief,'entry_next':float(kk[i+1][1]) if i+1<len(kk) else None,
                                        'regime':reg,'mclass':vcls})
@@ -615,7 +648,7 @@ def report_daily(send_tg=False):
                 e=json.loads(line)
                 if e.get('event')=='decision' and len(sample)<3: sample.append(e)
         except Exception: pass
-        tg.send(tg.fmt_briefing(rep, st.get('open',{}), sample))
+        tg.send(tg.fmt_briefing(rep, st.get('open',{}), sample, saldo=st.get('saldo',0.0)))
         # P18-fix: marker SETELAH kirim → notif berikutnya reset 0/0, briefing tetap 24 jam penuh
         open('/home/agentuser/.dewa_briefing_mark','w').write(time.strftime('%Y-%m-%dT%H:%M:%S+00:00', time.gmtime()))
     return rep

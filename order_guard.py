@@ -134,3 +134,24 @@ def can_open():
 if __name__ == "__main__":
     assert callable(submit_entry) and callable(can_open)
     print(f"order_guard v2 OK — janitor mode, max {MAX_GLOBAL_POSITIONS} posisi global")
+
+
+# ==== P22: EKUITAS REAL — baca wallet USDT futures beneran (LIVE) ====
+_wbal_cache=[0.0, 0.0]  # [ts, value]
+def real_wallet_balance(ttl=20.0):
+    """Saldo wallet USDT futures asli. Cache ttl detik. Return None kalau gak LIVE / API gagal."""
+    if not (API_KEY and API_SECRET):
+        return None
+    now=time.time()
+    if now-_wbal_cache[0] < ttl and _wbal_cache[1] is not None:
+        return _wbal_cache[1]
+    try:
+        rows=json.loads(_req('GET','/fapi/v2/balance',{}))
+        v=None
+        for r in rows:
+            if r.get('asset')=='USDT':
+                v=float(r.get('balance',0.0)); break
+        _wbal_cache[0]=now; _wbal_cache[1]=v
+        return v
+    except Exception:
+        return None

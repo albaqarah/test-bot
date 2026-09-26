@@ -131,9 +131,25 @@ def _bos_line():
     prov=os.environ.get('BOS_PROVIDER','jev').strip().lower()
     return "🤖 🟢 JEV" if prov=='jev' else "🤖 🟢 lightvela"
 
+def _saldo(saldo, tag=False):
+    """P22: saldo utk display — wallet REAL kalau LIVE, virtual kalau DRY.
+    tag=True → return (nilai, label) dgn label jujur sumber angka."""
+    if os.environ.get('MODE','dry').strip().lower()=='live':
+        try:
+            import order_guard as og
+            real=og.real_wallet_balance()
+            if real is not None:
+                return (real,'LIVE·wallet') if tag else real
+            return (saldo,'LIVE·sim!') if tag else saldo
+        except Exception:
+            return (saldo,'LIVE·sim!') if tag else saldo
+    return (saldo,'DRY') if tag else saldo
+
+
 def _equity(saldo):
-    live=os.environ.get('MODE','dry').strip().lower()=='live'
-    return f"💰 Ekuitas   ${saldo:+.2f} ({'LIVE' if live else 'DRY'})"
+    # P22: delegasi ke _saldo() biar semua notif (start/exit/entry) sumber & labelnya konsisten
+    v,lab=_saldo(saldo,True)
+    return f"💰 Ekuitas   ${v:+.2f} ({lab})"
 
 def _slots(st_open, maxpos=5):
     return f"🎟️ Slot      {len(st_open)}/{maxpos}"
@@ -167,7 +183,7 @@ def fmt_stop(saldo, n_open=0, reason='manual', open_syms=''):
     return (f"🛑 <b>BOT STOP · DEWA SNIPER v6.2</b>" + NL + DIV
         + NL + f"🏷️ Alasan    {reason}"
         + NL + f"📊 24 jam    {r['w']}W/{r['l']}L · WR {_wr(r):.1f}% · Net {_fmt_usd(r['net'])}"
-        + NL + f"💰 Ekuitas   ${saldo:+.2f}"
+        + NL + f"💰 Ekuitas   ${_saldo(saldo,True)[0]:+.2f} ({_saldo(saldo,True)[1]})"
         + NL + f"📌 Posisi    {pos}"
         + NL + DIV
         + NL + "Posisi yang masih terbuka TIDAK ikut tertutup. Pantau manual di app.")
@@ -269,7 +285,7 @@ def fmt_exit(e, saldo, n_open=None):
         f"├ Win rate {_wr(r):.1f}%",
         f"└ Net      {_fmt_usd(r['net'])}",
         DIV,
-        f"💰 Ekuitas ${saldo:+.2f} ({'LIVE' if os.environ.get('MODE','dry')=='live' else 'DRY'})"
+        f"💰 Ekuitas ${_saldo(saldo,True)[0]:+.2f} ({_saldo(saldo,True)[1]})"
         + (f"  ·  🎟️ Slot {n_open}/5" if n_open is not None else "")
         + NL + "🔒 Cooldown "+sym+" 30m"
         + NL + "⏰ "+_wib_now()]
@@ -294,7 +310,7 @@ def fmt_briefing(rep, open_positions, decisions_sample=None, saldo=0.0, uptime='
         f"├ Gross     {_fmt_usd(r['gross_win'])}",
         f"├ Fee       -{r['fee']:.2f} USDT",
         f"├ NET       {_fmt_usd(r['net'])} (24 jam)",
-        f"└ Ekuitas   ${saldo:+.2f} ({'LIVE' if os.environ.get('MODE','dry')=='live' else 'DRY'})",
+        f"└ Ekuitas   ${_saldo(saldo,True)[0]:+.2f} ({_saldo(saldo,True)[1]})",
         DIV,
         "🔥 LEADERBOARD"]
     if r['best']: lines.append(f"├ 🔼 Terbaik   {r['best'][0].replace('USDT','/USDT')} ({r['best'][1]:+.2f} USDT)")

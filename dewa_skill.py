@@ -243,9 +243,4 @@ def enrich_briefing(brief, kk, rs=None):
         cls,r6v = classify_momentum(kk, volx=volx, z=z, regime=b.get('regime',''))
     except Exception:
         cls,r6v = 'mean_reversion', r6
-    b['vision']={
-        'rsi6_now':r6v, 'rsi6_chart':r6sp,
-        'momentum_class':cls,
-        'last_bar':{'o':kk[-1][1],'h':kk[-1][2],'l':kk[-1][3],'c':kk[-1][4],'vol':kk[-1][5]},
-        'note':'bos: lihat RSI6 ekstrem & momentum_class sebelum memilih. JANGAN melawan momentum_class tanpa alasan kuat.'}
     return b

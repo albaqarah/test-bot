@@ -37,3 +37,19 @@ def tradfi_label(ts=None):
 
 if __name__=='__main__':
     print(tradfi_label())
+
+
+# ==== P23: TRADFI FORCE-FLAT ZONE ====
+# 3 jam sebelum break/close: kurir berhenti nyetor sinyal logam/PAXG (irit API bos + anti volume kopong)
+# 2 jam sebelum close: posisi TradFi terbuka dipaksa cair (alasan tradfi_eod)
+def tradfi_window(ts=None):
+    """Return (entry_blocked, force_flat, label).
+    entry_blocked = True mulai 14:00 ET (3 jam sebelum 17:00) / weekend zone
+    force_flat    = True mulai 16:00 ET (2 jam sebelum 17:00) / weekend zone"""
+    day,h,dt=_et_parts(ts)
+    wknd_eb = (day==4 and h>=14) or day==5 or (day==6 and h<18)  # blok entry: Jumat>=14:00 .. Minggu 18:00
+    wknd_ff = (day==4 and h>=16) or day==5 or (day==6 and h<18)  # force flat: Jumat>=16:00
+    daily_break = (day not in (5,)) and h>=14 and h<18           # Sen-Jum 14:00-18:00 (termasuk break 17-18)
+    ff = wknd_ff or ((day!=5) and h>=16 and h<18)
+    eb = wknd_eb or daily_break
+    return eb, ff, 'WEEKEND' if wknd_eb else ('DAILY BREAK' if daily_break else '')
