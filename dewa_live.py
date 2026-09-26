@@ -499,7 +499,7 @@ def _iterate_inner(once=False):
         # P30 REJECT-COOLDOWN: REJECT = jangan tanya bos utk (sym,side) yg sama dlm 15 menit — hemat API jev
         # (kasus P29: ATOM SHORT ditanya 40x/2jam = 44% budget jev terbuang utk jawaban sama)
         if d.get('decision')=='REJECT':
-            st.setdefault('reject_cd',{})[cd['sym']+':'+cd['side']]=time.time()*1000+15*60*1000
+            st.setdefault('reject_cd',{})[cd['sym']+':'+_side]=time.time()*1000+15*60*1000
         if d.get('decision')!='CONFIRMED': continue
         # P16-B: WICK-EXTREME FLIP — bos dilarang ACC searah wick ekstrem. Kalau sinyal LONG datang
         # pas RSI6 realtime > 90 (pucuk), bos membalik jadi SHORT (peluang valid fade). Mirror SHORT < 10 → LONG.
