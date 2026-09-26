@@ -55,12 +55,6 @@ def _cond_order(symbol, side_close, stop_price, otype):
         "stopPrice": f"{stop_price:.6g}", "closePosition": "true",
         "workingType": "MARK_PRICE", "timeInForce": "GTE_GTC"})
 
-def _position_qty(symbol):
-    try:
-        pos = _req("GET", "/fapi/v2/positionRisk", {"symbol": symbol})
-        return abs(float(pos[0]["positionAmt"])) if pos else 0.0
-    except Exception:
-        return 0.0
 
 def open_positions():
     """Semua posisi non-zero."""

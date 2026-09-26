@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """
 dewa_skill.py — Skill injection utk 1 LLM agent (bos entry).
 Algoritma matematika = kurir: cuma setor kandidat grade A/B.
@@ -141,7 +142,7 @@ def btc_bias():
     if now-_btc_cache['t']<60: return _btc_cache['v']
     try:
         if 'vg' not in globals():
-            spec=_iu.spec_from_file_location('vg','/home/agentuser/v15_grade.py')
+            spec=_iu.spec_from_file_location('vg',os.path.join(os.path.dirname(os.path.abspath(__file__)),'v15_grade.py'))
             g=_iu.module_from_spec(spec); spec.loader.exec_module(g); globals()['vg']=g
         def ema(v,n=20):
             k=2/(n+1); e=v[0]

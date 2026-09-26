@@ -6,7 +6,7 @@ Live    : cancel semua openOrders closePosition symbol tsb via Binance API, lalu
 """
 import json, os
 
-STATE='/home/agentuser/dewa_live_state.json'
+STATE=os.path.join(os.path.dirname(os.path.abspath(__file__)),'dewa_live_state.json')
 
 def cleanup_leftovers(symbol, live=False):
     """Return dict status. Di live: cancel + verifikasi loop 3x."""

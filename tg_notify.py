@@ -18,7 +18,8 @@ def _wib_now():
     return datetime.now(timezone(timedelta(hours=7))).strftime('%d %b %Y - %H:%M:%S WIB')
 
 
-def _load_env(path='/home/agentuser/.env'):
+def _load_env(path=None):
+    path=path or os.path.join(os.path.dirname(os.path.abspath(__file__)),'.env')
     try:
         for line in open(path):
             line=line.strip()
@@ -28,8 +29,6 @@ def _load_env(path='/home/agentuser/.env'):
     except Exception: pass
 _load_env()
 
-def now_wib():
-    return datetime.now(WIB).strftime('%d %b %Y - %H:%M:%S WIB')
 
 def send(text, chat_id=None, token=None):
     tok = token or os.environ.get("TG_BOT_TOKEN", "")
@@ -75,7 +74,7 @@ def _pf(resume):
     gl=resume.get('gross_loss',0)
     return resume.get('gross_win',0)/gl if gl>0 else (float('inf') if resume.get('gross_win') else 0.0)
 
-_BRIEF_MARK='/home/agentuser/.dewa_briefing_mark'
+_BRIEF_MARK=os.path.join(os.path.dirname(os.path.abspath(__file__)),'.dewa_briefing_mark')
 def _briefing_cutoff():
     """Cutoff rekap: sejak morning briefing terakhir (reset 0/0 tiap briefing)."""
     import os as _os
@@ -90,7 +89,7 @@ def _resume24():
     try:
         _bm=_briefing_cutoff()
         cutoff=_bm if _bm else (_time.time()-86400)
-        for line in open('/home/agentuser/dewa_live_log.jsonl'):
+        for line in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'dewa_live_log.jsonl')):
             try: d=json.loads(line)
             except Exception: continue
             if d.get('event')!='exit': continue
@@ -151,8 +150,6 @@ def _equity(saldo):
     v,lab=_saldo(saldo,True)
     return f"💰 Ekuitas   ${v:+.2f} ({lab})"
 
-def _slots(st_open, maxpos=5):
-    return f"🎟️ Slot      {len(st_open)}/{maxpos}"
 
 def _regime_line():
     try:
@@ -177,19 +174,7 @@ def fmt_start(saldo, n_open=0, maxpos=5, n_pair=41):
         + NL + _bos_line()
         + NL + "🖥️ UI        log ringkas")
 
-def fmt_stop(saldo, n_open=0, reason='manual', open_syms=''):
-    r=_resume24()
-    pos=f"{n_open} terbuka ({open_syms})" if n_open else "tidak ada"
-    return (f"🛑 <b>BOT STOP · DEWA SNIPER v6.2</b>" + NL + DIV
-        + NL + f"🏷️ Alasan    {reason}"
-        + NL + f"📊 24 jam    {r['w']}W/{r['l']}L · WR {_wr(r):.1f}% · Net {_fmt_usd(r['net'])}"
-        + NL + f"💰 Ekuitas   ${_saldo(saldo,True)[0]:+.2f} ({_saldo(saldo,True)[1]})"
-        + NL + f"📌 Posisi    {pos}"
-        + NL + DIV
-        + NL + "Posisi yang masih terbuka TIDAK ikut tertutup. Pantau manual di app.")
 
-def fmt_restart(saldo, n_open=0, maxpos=5):
-    return fmt_start(saldo, n_open, maxpos)
 
 # ---------- ENTRY (gaya v15) ----------
 def fmt_open(e):
@@ -211,6 +196,7 @@ def fmt_open(e):
         if e.get('mf'): parts.append(f"🛰️ {e['mf']}")
         if e.get('mss') and e['mss']!='NONE': parts.append("MSS "+str(e['mss']).replace('MSS_','').replace('_',' '))
         if e.get('fvg') and e['fvg']!='NONE': parts.append(f"FVG {e['fvg']}")
+        if e.get('battery'): parts.append({'FULL':'🔋 BATTERY FULL','MID':'🔋 BATTERY MID','LOW':'🪫 BATTERY LOW'}.get(e['battery'], '🔋 '+e['battery']))
         if parts: smc=NL+' · '.join(parts)
     # P21b: baris pipeline P1-P8 (faktual dari sinyal, bukan LLM)
     try:
@@ -243,11 +229,6 @@ def fmt_open(e):
         + NL + "⏰ "+_wib_now())
 
 # ---------- TRAIL LOCK ----------
-def fmt_trail_lock(sym, side, new_sl, entry, peak):
-    mv=(new_sl-entry)/entry*(100 if side=='LONG' else -100)
-    return (f"🛡️ <b>BREAKEVEN TRAIL LOCKED</b> · {sym} · {side}"
-        + NL + f"SL digeser ke <code>{round(new_sl,6)}</code> (kunci profit {mv:+.2f}% dari puncak {round(peak,6)})"
-        + NL + "⏰ "+_wib_now())
 
 # ---------- CLOSED (gaya v15) ----------
 def fmt_exit(e, saldo, n_open=None):

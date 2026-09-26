@@ -10,6 +10,7 @@ Hitung dari data Binance murni (tanpa API eksternal wajib):
 Semua best-effort: exception → nilai None (bos diajak ragu, bukan crash).
 """
 import json, statistics, urllib.request
+import os
 
 TRADFI = {'XAUUSDT', 'XAGUSDT', 'XPTUSDT'}  # PAXG = crypto-ekosistem (ikut modul crypto)
 
@@ -157,7 +158,7 @@ def dxy_bias():
     """Best-effort via tv_bridge: DXY 1h EMA20 vs EMA50. Gagal → SIDEWAYS."""
     try:
         import subprocess
-        out = subprocess.run(['node', '/home/agentuser/tv_bridge.js', 'TVC:DXY'],
+        out = subprocess.run(['node', os.path.join(os.path.dirname(os.path.abspath(__file__)),'tv_bridge.js'), 'TVC:DXY'],
                              capture_output=True, text=True, timeout=40)
         d = json.loads(out.stdout)
         tf60 = d.get('tf60', {}).get('ta', {})
@@ -237,3 +238,37 @@ def pipeline_log(brief, dec, conf):
         'P8_freshness': f"{brief.get('age_min')}m" if brief.get('age_min') is not None else 'live',
         'decision': dec.get('decision'), 'conf': conf,
     }
+
+
+# ==== P26: MOMENTUM BATTERY — sisa bensin gerakan (crypto & tradfi) ====
+def momentum_battery(k, side=None):
+    """k = list candle 5m (kolom Binance). Return dict {battery: 'FULL'|'MID'|'LOW', pct: 0-100, detail}.
+    Komponen:
+      1) vol_decay: volume 3 candle terakhir vs 20-bar avg — masih naik = bensin penuh
+      2) room: jarak harga ke hi/lo 48-bar (sisa ruang gerak arah sinyal)
+    Battery = rata-rata bobot (vol 50% + room 50%)."""
+    try:
+        c=[float(x[4]) for x in k]; h=[float(x[2]) for x in k]
+        l=[float(x[3]) for x in k]; v=[float(x[5]) for x in k]
+        n=len(c)
+        if n<25: return {'battery':'MID','pct':50,'vol_ratio':None,'room_pct':None}
+        # 1) volume decay 3 candle terakhir (exclude bar forming? pakai semua, pembobotan kecil)
+        vavg=sum(v[-23:-3])/20
+        vlast=sum(v[-3:])/3
+        vol_ratio=vlast/vavg if vavg else 1.0
+        vol_score=max(0.0,min(1.0,(vol_ratio-0.5)/1.5))  # 0.5x=0%, 2.0x=100%
+        # 2) sisa ruang: jarak close ke ekstrem 48-bar
+        win=min(n,49)
+        hi48=max(h[-win:]); lo48=min(l[-win:]); px=c[-1]
+        rng=hi48-lo48
+        room_up=(hi48-px)/rng if rng>0 else 0.5
+        room_dn=(px-lo48)/rng if rng>0 else 0.5
+        if side=='LONG': room=room_up
+        elif side=='SHORT': room=room_dn
+        else: room=max(room_up,room_dn)
+        pct=round((0.5*vol_score+0.5*room)*100)
+        bat='FULL' if pct>=60 else ('LOW' if pct<30 else 'MID')
+        return {'battery':bat,'pct':pct,'vol_ratio':round(vol_ratio,2),
+                'room_pct':round(room*100,1)}
+    except Exception as e:
+        return {'battery':'MID','pct':50,'vol_ratio':None,'room_pct':None,'err':str(e)[:60]}

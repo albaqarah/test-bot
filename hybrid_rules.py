@@ -10,6 +10,7 @@ Grade: A = kedua mesin sepakat / konfluensi penuh; B = 1 mesin doang
 Semua tetap lolos bos LLM sebelum entry.
 """
 import reversion_bot as rb
+import os
 
 def ema_series(vals,n):
     k=2/(n+1); out=[vals[0]]
@@ -167,7 +168,7 @@ def _stoch_from_rsi(rs, n=14):
 def build_htf_maps(sym, k5_len):
     """EMA20 dari 15m & 1h, dipetakan ke timeline 5m (backtest)."""
     import importlib.util
-    spec=importlib.util.spec_from_file_location('vg','/home/agentuser/v15_grade.py')
+    spec=importlib.util.spec_from_file_location('vg',os.path.join(os.path.dirname(os.path.abspath(__file__)),'v15_grade.py'))
     vg=importlib.util.module_from_spec(spec); spec.loader.exec_module(vg)
     maps={}
     for tf,cnt in (('15m',1000),('1h',500)):

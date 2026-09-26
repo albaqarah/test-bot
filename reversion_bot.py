@@ -16,10 +16,11 @@ Eksekusi: BE-system (SL -> BE segera, offset > fee) + RR 3:1 bonus, max hold 480
 IS/OOS: 4000 bar pertama = IS, 2000 terakhir = OOS.
 """
 import importlib.util, json, statistics, time
+import os
 
-spec=importlib.util.spec_from_file_location('vg','/home/agentuser/v15_grade.py')
+spec=importlib.util.spec_from_file_location('vg',os.path.join(os.path.dirname(os.path.abspath(__file__)),'v15_grade.py'))
 vg=importlib.util.module_from_spec(spec); spec.loader.exec_module(vg)
-spec2=importlib.util.spec_from_file_location('btf','/home/agentuser/backtest_v15x_final.py')
+spec2=importlib.util.spec_from_file_location('btf',os.path.join(os.path.dirname(os.path.abspath(__file__)),'backtest_v15x_final.py'))
 btf=importlib.util.module_from_spec(spec2); spec2.loader.exec_module(btf)
 
 FEE_M=0.0002; FEE_T=0.0005
@@ -166,4 +167,4 @@ if __name__=='__main__':
     print(f"OOS: trades={oos_tot} pnl=${oos_pnl:.2f} pair+={oos_pos}/{len(rows)} nl_med={statistics.median(oos_nl):.1f}%" if oos_nl else "")
     out={'rows':{s:{'regime':reg,'sigs':n,'IS':r['IS'],'OOS':r['OOS']} for s,reg,n,r in rows},
          'totals':{'IS_pnl':round(is_pnl,2),'OOS_pnl':round(oos_pnl,2)}}
-    json.dump(out, open('/home/agentuser/reversion_results.json','w'), indent=1)
+    json.dump(out, open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'reversion_results.json'),'w'), indent=1)

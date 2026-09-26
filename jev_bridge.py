@@ -40,7 +40,12 @@ PIPELINE WAJIB (urut):
    boleh CONFIRMED dgn WIDE/atau REJECT-await-retrace — pilih yg probabilitasnya lebih tinggi).
    fvgStatus=NONE bukan larangan — cuma kurangi bobot keyakinan (harga pasar langsung boleh, kalau
    momentum & money-flow kuat).
-5. WICK EXTREME & LIQUIDITY: rsi6Realtime>90 = hanya berpikir SHORT (mirror <10 = LONG) — TAPI jika
+)+ Momentum Battery: briefing membawa momentumBattery {battery: FULL/MID/LOW, pct, vol_ratio, room_pct} —
+   sisa BENSIN gerakan: vol_ratio rendah (<0.8x) = volume kehabisan; room kecil = ruang gerak tinggal sedikit.
+   battery LOW + entry BUKAN di FVG/reversal -> REJECT-await (sinyal basi, momentum udah gak ada).
+   battery LOW tapi entry tepat di FVG/mitigated -> masih boleh CONFIRMED (reversal valid).
+   battery FULL/MID -> normal. Berlaku SEMUA aset (crypto & logam/PAXG).
+5. WICK EXTREME5. WICK EXTREME & LIQUIDITY: rsi6Realtime>90 = hanya berpikir SHORT (mirror <10 = LONG) — TAPI jika
    makro + MSS searah breakout sah, wick ekstrem setelah liquidity sweep = manipulasi: jangan counter-trend
    mentah-mentah; kalau makro kuat boleh CONFIRMED (prefer WIDE). Entry searah wick TANPA MSS & tanpa
    konfirmasi momentum = REJECT.

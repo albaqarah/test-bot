@@ -23,7 +23,8 @@ Usage: python3 dewa_live.py --pairs ALL --once   (1 iterasi, untuk cron)
 import importlib.util, json, os, sys, time, argparse, subprocess, urllib.request
 from datetime import datetime, timezone
 
-def _load_env(path='/home/agentuser/.env'):
+def _load_env(path=None):
+    path=path or os.path.join(os.path.dirname(os.path.abspath(__file__)),'.env')
     try:
         for line in open(path):
             line=line.strip()
@@ -33,9 +34,9 @@ def _load_env(path='/home/agentuser/.env'):
     except Exception: pass
 _load_env()
 
-spec=importlib.util.spec_from_file_location('vg','/home/agentuser/v15_grade.py')
+spec=importlib.util.spec_from_file_location('vg',os.path.join(os.path.dirname(os.path.abspath(__file__)),'v15_grade.py'))
 vg=importlib.util.module_from_spec(spec); spec.loader.exec_module(vg)
-spec2=importlib.util.spec_from_file_location('btf','/home/agentuser/backtest_v15x_final.py')
+spec2=importlib.util.spec_from_file_location('btf',os.path.join(os.path.dirname(os.path.abspath(__file__)),'backtest_v15x_final.py'))
 btf=importlib.util.module_from_spec(spec2); spec2.loader.exec_module(btf)
 import reversion_bot as rb
 import dewa_skill as ds
@@ -72,9 +73,9 @@ P6_LOOSE=os.environ.get('P6_LOOSE','off').strip().lower() in ('on','1','true','y
 COOLDOWN_MS=COOLDOWN_MIN*60*1000
 LIVE=os.environ.get('MODE','dry').strip().lower()=='live'   # MODE=live di .env -> eksekusi nyata
 
-LOG='/home/agentuser/dewa_live_log.jsonl'
-STATE='/home/agentuser/dewa_live_state.json'
-LOCKF='/home/agentuser/dewa_live.lock'
+LOG=os.path.join(os.path.dirname(os.path.abspath(__file__)),'dewa_live_log.jsonl')
+STATE=os.path.join(os.path.dirname(os.path.abspath(__file__)),'dewa_live_state.json')
+LOCKF=os.path.join(os.path.dirname(os.path.abspath(__file__)),'dewa_live.lock')
 # COOLDOWN_MS sekarang dari COOLDOWN_MIN (.env)
 
 def acquire_lock(block_wait=0.0):
@@ -133,7 +134,7 @@ def tv_ta(sym):
     try:
         from bot_v15_unified import TV_SYMBOL_MAP
         sym2=TV_SYMBOL_MAP.get(sym, f"BINANCE:{sym}")
-        out=subprocess.run(["node","/home/agentuser/tv_bridge.js",sym2],
+        out=subprocess.run(["node",os.path.join(os.path.dirname(os.path.abspath(__file__)),"tv_bridge.js"),sym2],
                            capture_output=True,text=True,timeout=40)
         d=json.loads(out.stdout)
         return {tf:(d[tf]['ta'] if d.get(tf) else None) for tf in ('tf5','tf15','tf60')}
@@ -419,6 +420,7 @@ def _iterate_inner(once=False):
                     try:
                         import smc_engine as _smc
                         _smcd=_smc.enrich(sym, brief.get('btc_bias'))
+                        _smcd['momentumBattery']=_smc.momentum_battery(kk, brief.get('side'))
                         brief.update(_smcd)
                     except Exception: pass
                     # P13 KURIR GATE: momen 'kering' (tanpa aliran) dibuang SEBELUM bos — hemat API + anti sinyal sampah
@@ -432,16 +434,23 @@ def _iterate_inner(once=False):
                         if _eb:
                             log({'event':'skip_tradfi_window','symbol':sym,'side':side,'window':_why})
                             continue
+                    # P27: battery & upgrade grade B -> A kalau momentum battery FULL + MSS searah
+                    _bat=str((brief.get('momentumBattery') or {}).get('battery','MID'))
+                    _mss=str(brief.get('mss',''))
+                    _mss_ok=(side=='L' and 'BULL' in _mss) or (side=='S' and 'BEAR' in _mss)
+                    if grade=='B' and _bat=='FULL' and _mss_ok:
+                        grade='A'
+                        log({'event':'grade_upgrade','symbol':sym,'side':side,'why':'battery FULL + MSS searah'})
                     candidates.append({'sym':sym,'i':i,'side':side,'grade':grade,'key':key,'src':src,
                                        'brief':brief,'entry_next':float(kk[i+1][1]) if i+1<len(kk) else None,
-                                       'regime':reg,'mclass':vcls})
+                                       'regime':reg,'mclass':vcls,'battery':_bat})
                     done.add(key)
         except Exception as e:
             log({'event':'err','symbol':sym,'msg':str(e)[:80]})
         st.setdefault('last_seen',{})[sym]=kk[-1][0]
     st['done']=[list(k) for k in list(done)[-600:]]  # persist dedup (cap 600)
     # 3) bos putuskan (batch, urut grade A dulu)
-    candidates.sort(key=lambda x:(x['grade']!='A', x['sym']))
+    candidates.sort(key=lambda x:(x['grade']!='A', x.get('battery')!='FULL', x['sym']))
     confirmed=0
     # GATE HEMAT-API (user): posisi penuh 5/5 -> kurir DILARANG nanya bos LLM. Notif sekali per kejadian.
     if candidates and n_open>=og.MAX_GLOBAL_POSITIONS:
@@ -584,6 +593,7 @@ def _iterate_inner(once=False):
                              'conf':d.get('confidence'),'reason':reason,
                              'mf':(cd.get('brief') or {}).get('moneyFlow') or (cd.get('brief') or {}).get('tradfiMoneyFlow'),
                              'mss':(cd.get('brief') or {}).get('mss'),
+'battery':((cd.get('brief') or {}).get('momentumBattery') or {}).get('battery'),
                              'fvg':(cd.get('brief') or {}).get('fvgStatus')})+'\n🟢 <b>MODE LIVE</b> — order beneran terkirim')
                 confirmed+=1
             except Exception as ex:
@@ -605,6 +615,7 @@ def _iterate_inner(once=False):
                              'variant':str(d.get('variant','')).upper(),
                              'mf':(cd.get('brief') or {}).get('moneyFlow') or (cd.get('brief') or {}).get('tradfiMoneyFlow'),
                              'mss':(cd.get('brief') or {}).get('mss'),
+'battery':((cd.get('brief') or {}).get('momentumBattery') or {}).get('battery'),
                              'fvg':(cd.get('brief') or {}).get('fvgStatus'),
                              'regime':regime,'mclass':_v.get('momentum_class'),
                              'rsi6':_v.get('rsi6_now'),
@@ -650,7 +661,7 @@ def report_daily(send_tg=False):
         except Exception: pass
         tg.send(tg.fmt_briefing(rep, st.get('open',{}), sample, saldo=st.get('saldo',0.0)))
         # P18-fix: marker SETELAH kirim → notif berikutnya reset 0/0, briefing tetap 24 jam penuh
-        open('/home/agentuser/.dewa_briefing_mark','w').write(time.strftime('%Y-%m-%dT%H:%M:%S+00:00', time.gmtime()))
+        open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'.dewa_briefing_mark'),'w').write(time.strftime('%Y-%m-%dT%H:%M:%S+00:00', time.gmtime()))
     return rep
 
 if __name__=='__main__':
