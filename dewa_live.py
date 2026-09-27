@@ -21,6 +21,7 @@ Usage: python3 dewa_live.py --pairs ALL --once   (1 iterasi, untuk cron)
        python3 dewa_live.py --live               (EKSEKUSI BENERAN — butuh API key, default OFF)
 """
 import importlib.util, json, os, sys, time, argparse, subprocess, urllib.request
+P31a_BATTERY_ON=False  # P31a: OFF = persona jev v3.5 murni (rollback strategi 25 Sep)
 from datetime import datetime, timezone
 
 def _load_env(path=None):
@@ -422,8 +423,11 @@ def _iterate_inner(once=False):
                     try:
                         import smc_engine as _smc
                         _smcd=_smc.enrich(sym, brief.get('btc_bias'))
-                        _smcd['momentumBattery']=_smc.momentum_battery(kk, brief.get('side'))
-                        _smcd.update(_smc.reversal_hint(kk))
+                        # P31a ROLLBACK STRATEGI: battery & hint OFF — persona jev kembali v3.5 murni (gaya 25 Sep).
+                        # Flip P31a_BATTERY_ON=True utk aktifkan lagi (engine utuh di smc_engine).
+                        if P31a_BATTERY_ON:
+                            _smcd['momentumBattery']=_smc.momentum_battery(kk, brief.get('side'))
+                            _smcd.update(_smc.reversal_hint(kk))
                         brief.update(_smcd)
                     except Exception: pass
                     # P13 KURIR GATE: momen 'kering' (tanpa aliran) dibuang SEBELUM bos — hemat API + anti sinyal sampah
@@ -441,7 +445,7 @@ def _iterate_inner(once=False):
                     _bat=str((brief.get('momentumBattery') or {}).get('battery','MID'))
                     _mss=str(brief.get('mss',''))
                     _mss_ok=(side=='L' and 'BULL' in _mss) or (side=='S' and 'BEAR' in _mss)
-                    if grade=='B' and _bat=='FULL' and _mss_ok:
+                    if P31a_BATTERY_ON and grade=='B' and _bat=='FULL' and _mss_ok:
                         grade='A'
                         log({'event':'grade_upgrade','symbol':sym,'side':side,'why':'battery FULL + MSS searah'})
                     candidates.append({'sym':sym,'i':i,'side':side,'grade':grade,'key':key,'src':src,
