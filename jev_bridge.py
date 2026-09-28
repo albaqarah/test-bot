@@ -127,8 +127,9 @@ def build_questions(brief):
           "REJECT":"LAYAK DITOLAK: lawan money-flow tanpa MSS, momentum kering, telat, atau total CONFIRMED < 0.55. Kalau arah benar tapi harga belum retrace ke FVG, pakai REJECT — kurir bakal nanya lagi saat retrace"
         }}}
     for name,label,inst,crit in RUBRIC:
+        # Schema server (dibedah 28 Sep): criteria utk type 'score' = ARRAY (bukan object spt 'choice').
         q[name]={"type":"score","instructions":f"{label} — {inst}. Skala 0-4.",
-                 "criteria":{k:f"skor {k}: {v}" for k,v in crit.items()}}
+                 "criteria":[f"skor {k}: {v}" for k,v in crit.items()]}
     q["noul_invalidate"]={"type":"noul","instructions":"SATU kalimat: apa yg membuat trade ini GUGUR (invalidasi)?"}
     q["noul_flip"]={"type":"noul","instructions":"SATU kalimat: sinyal apa yg akan MEMBALIK bias kamu?"}
     return q
