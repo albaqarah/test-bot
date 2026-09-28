@@ -150,18 +150,44 @@ def squeeze(kk, i=None, n=20):
     return {'squeeze_on':bool(bb_hi<kc_hi and bb_lo>kc_lo),
             'bb_width_pct':round((bb_hi-bb_lo)/m*100,2)}
 
+def _rsi6(cl):
+    """RSI6 Wilder lokal (self-contained, sama metode dgn reversion_bot)."""
+    if len(cl)<8: return None
+    gains=[];losses=[]
+    for i in range(1,len(cl)):
+        d=cl[i]-cl[i-1]; gains.append(max(d,0.0)); losses.append(max(-d,0.0))
+    ag=sum(gains[:6])/6; al=sum(losses[:6])/6
+    for i in range(6,len(gains)):
+        ag=(ag*5+gains[i])/6; al=(al*5+losses[i])/6
+    if al<=0: return 100.0
+    rs=ag/al
+    return round(100-100/(1+rs),1)
+
+def _regime(cl):
+    """Regime stack EMA20/EMA50 (definisi sama dgn reversion_bot.regime_1h).
+    Return (regime, dir) — dir tetap 'UP'/'DOWN' vs EMA20 (skor rubric TIDAK berubah)."""
+    e20=ema(cl,20); e50=ema(cl,50)
+    if not e20 or not e50: return None, None
+    c=cl[-1]
+    reg='TREND_UP' if c>e20>e50 else ('TREND_DOWN' if c<e50<e20 else 'RANGE')
+    d='UP' if c>e20 else 'DOWN'
+    return reg, d
+
 def mtf_align(sym, side_hint=None):
-    """EMA20 5m/15m/1h arah. Return {'5m','15m','1h','score'}. score = jumlah TF searah side_hint."""
-    out={}
-    for iv,lim in (('5m',30),('15m',30),('1h',30)):
-        k=klines(sym,iv,lim)
+    """P32-B (ACC user 28 Sep): per TF kirim regime + rsi6 + dir — persis doc section D.
+    {'5m':{'regime','rsi6','dir'}, '15m':..., '1h':..., 'score':N}
+    score = jumlah TF searah side_hint (dari dir vs EMA20 — perilaku lama dipertahankan)."""
+    out={}; dirs={}
+    for iv in ('5m','15m','1h'):
+        k=klines(sym,iv,60)
         if not k: out[iv]=None; continue
         cl=[float(b[4]) for b in k]
-        e=ema(cl,20)
-        out[iv]='UP' if (e and cl[-1]>e) else ('DOWN' if e else None)
+        reg,d=_regime(cl)
+        out[iv]={'regime':reg,'rsi6':_rsi6(cl),'dir':d}
+        dirs[iv]=d
     if side_hint in ('LONG','SHORT'):
         want='UP' if side_hint=='LONG' else 'DOWN'
-        out['score']=sum(1 for iv in ('5m','15m','1h') if out.get(iv)==want)
+        out['score']=sum(1 for iv in ('5m','15m','1h') if dirs.get(iv)==want)
     else: out['score']=None
     return out
 
