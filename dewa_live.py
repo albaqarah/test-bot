@@ -146,6 +146,9 @@ BOS_PROVIDER=os.environ.get('BOS_PROVIDER','jev').strip().lower()   # 'jev' | 'l
 
 def llm_call(brief):
     # P-jev: jev = bos utama (0.6 dtk, typed, no_json impossible); error -> fallback lightvela otomatis
+    # P32 RESILIENSI (koreksi user 28 Sep): 402 = jev quota habis -> GANTI PROVIDER (chain .env
+    # BOS_FALLBACKS), TANPA istirahat. 429 ditangani di dalam jev_bridge (retry 3s x2).
+    # Loop TIDAK PERNAH tidur panjang; scan tetap hidup selalu.
     if BOS_PROVIDER=='jev':
         try:
             import jev_bridge
@@ -154,10 +157,11 @@ def llm_call(brief):
                 return r
             raise RuntimeError('jev bad response')
         except Exception as e:
-            log({'event':'jev_fallback','msg':str(e)[:100]})
+            _is402 = jev402_hit(e)
+            log({'event':('jev_402' if _is402 else 'jev_fallback'),'msg':str(e)[:100]})
+            if _is402: _notify_bos_down('402', str(e))
     base=os.environ.get("LLM_BASE_URL")
     key=os.environ.get("LLM_API_KEY") or os.environ.get("CUSTOM_API_KEY")
-    model=os.environ.get("LLM_MODEL","auto")
     if not base:
         try:
             line=[l for l in open(os.path.expanduser('~/.hermes/config.yaml')) if 'base_url' in l][0]
@@ -171,27 +175,79 @@ def llm_call(brief):
     FORCE_JSON=("\n\nOutput WAJIB: SATU baris JSON murni, mulai langsung dengan { tanpa teks pembuka:\n"
                 '{"decision":"CONFIRMED"|"REJECT","confidence":0-100,"reason":"maksimal 20 kata","key_factor":"maksimal 12 kata"}\n'
                 "JANGAN jelaskan proses berpikir. JANGAN tulis analisis. LANGSUNG JSON-nya saja.")
-    body=json.dumps({"model":model,"temperature":0.1,"max_tokens":1500,
-        "messages":[{"role":"system","content":ds.SYSTEM_PROMPT+FORCE_JSON},
-                    {"role":"user","content":json.dumps(brief)}]}).encode()
-    req=urllib.request.Request(base.rstrip('/')+"/chat/completions",data=body,
-        headers={"Authorization":f"Bearer {key}","Content-Type":"application/json"})
-    last_err='unknown'
-    for attempt in range(2):
-        try:
-            with urllib.request.urlopen(req,timeout=60) as r:
-                msg=json.loads(r.read())["choices"][0]["message"]
-            txt=(msg.get("content") or "").strip()
-            if not txt:
-                txt=(msg.get("reasoning_content") or "").strip()
-            i,j=txt.find("{"),txt.rfind("}")
-            if i<0 or j<=i:
-                raise ValueError("no_json_in_response")
-            return json.loads(txt[i:j+1])
-        except Exception as ex:
-            last_err=str(ex)[:50]
-            time.sleep(3)  # retry cepat, jangan gondok timer iterasi
+    # P32 CHAIN fallback dari .env BOS_FALLBACKS (koma). Coba berurutan; 402 = lompat model
+    # berikutnya TANPA tidur; error lain (429/timeout) = retry 3 detik (max 2) per model.
+    fb=[m.strip() for m in os.environ.get('BOS_FALLBACKS','').replace(' ', ',').split(',') if m.strip()]
+    if not fb: fb=[os.environ.get("LLM_MODEL","auto")]
+    last_err='unknown'; _402set=set()
+    for model in fb:
+        body=json.dumps({"model":model,"temperature":0.1,"max_tokens":1500,
+            "messages":[{"role":"system","content":ds.SYSTEM_PROMPT+FORCE_JSON},
+                        {"role":"user","content":json.dumps(brief)}]}).encode()
+        req=urllib.request.Request(base.rstrip('/')+"/chat/completions",data=body,
+            headers={"Authorization":f"Bearer {key}","Content-Type":"application/json"})
+        for attempt in range(2):
+            try:
+                with urllib.request.urlopen(req,timeout=60) as r:
+                    msg=json.loads(r.read())["choices"][0]["message"]
+                txt=(msg.get("content") or "").strip()
+                if not txt:
+                    txt=(msg.get("reasoning_content") or "").strip()
+                i,j=txt.find("{"),txt.rfind("}")
+                if i<0 or j<=i:
+                    raise ValueError("no_json_in_response")
+                return json.loads(txt[i:j+1])
+            except Exception as ex:
+                last_err=str(ex)[:50]
+                if '402' in last_err or 'Payment Required' in last_err:
+                    _402set.add(model)
+                    break  # keblok -> lompat ke model berikutnya, JANGAN tidur
+                time.sleep(3)  # retry cepat 3 detik (koreksi user 429), max 2x per model
+    if _402set:
+        # SEMUA model 402 = bot diem total (spec user); sebagian = masih ada fallback
+        _all = len(_402set)>=len(fb)
+        _notify_bos_down('402_all' if _all else '402', f'402 di {sorted(_402set)}; err terakhir: {last_err}')
     return {"decision":"REJECT","confidence":0,"reason":f"llm_err:{last_err}"}
+
+def jev402_hit(e):
+    """True kalau exception = HTTP 402 Payment Required (quota habis -> ganti provider)."""
+    try:
+        import jev_bridge as _jb
+        if isinstance(e, _jb.Jev402): return True
+    except Exception:
+        pass
+    s=str(e)
+    return '402' in s or 'Payment Required' in s
+
+def _notify_bos_down(kind, detail=''):
+    """P32: notif TG data-real (bukan 'BOT START'). Max 1x/jam per kind — anti spam.
+    kind='402'      -> jev/downstream 402, fallback jalan (bot TIDAK diem).
+    kind='402_all'  -> SEMUA provider 402 -> bot diem total (spec user)."""
+    try:
+        st=load_state()
+        now=time.time()
+        key=f'bos_down_{kind}'
+        if now-st.get(key,0) < 3600: return
+        st[key]=now; save_state(st)
+        bot_provider=BOS_PROVIDER or 'jev'
+        fb=os.environ.get('BOS_FALLBACKS','lightvela')
+        if kind=='402_all':
+            head=f"🔴 SEMUA BOS LLM 402 — TOPUP DIBUTUHKAN"
+            status="➡️ Status    : TIDAK ADA model yang bisa mikir — bot idle menunggu topup"
+        else:
+            head=f"⚠️ BOS {bot_provider.upper()} 402 — BUTUH TOPUP"
+            status=f"➡️ Fallback  : {fb} — bot TETAP jalan, scan tetap hidup"
+        tg.send(
+            f"{head}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"⏰ {datetime.now(timezone.utc).strftime('%d %b %H:%M UTC')}\n"
+            f"🤖 Bos utama : {bot_provider} (HTTP 402 Payment Required)\n"
+            f"🔗 Detail    : {detail[:90]}\n"
+            f"{status}\n"
+            f"🔁 Retry 429 : otomatis 3 detik (aktif)\n"
+            f"🛡️ Loop      : TIDAK istirahat 10 menit, TIDAK restart")
+    except Exception as e:
+        log({'event':'notify_bos_down_err','msg':str(e)[:80]})
 
 def manage_open(st, k_cache):
     """Update posisi virtual: BE-shift, SL/TP hit, max-hold. Return realized pnl list."""
@@ -430,6 +486,17 @@ def _iterate_inner(once=False):
                             _smcd.update(_smc.reversal_hint(kk))
                         brief.update(_smcd)
                     except Exception: pass
+                    # P32 MARKET SNAPSHOT: 10 skill pasar + WICK-HUNTER (host-side, gratis).
+                    # Gagal = field kosong, pipeline jalan normal (never raise).
+                    try:
+                        import market_snapshot as _mkt
+                        _mkt.enrich_market(brief, sym, kk, rs)
+                        if brief.get('wickHint') and brief['wickHint'].get('dir')!='NONE':
+                            log({'event':'wick_hint','symbol':sym,'side':side,
+                                 'hint':brief['wickHint'].get('dir'),
+                                 'pattern':brief['wickHint'].get('pattern'),
+                                 'strength':brief['wickHint'].get('strength')})
+                    except Exception: pass
                     # P13 KURIR GATE: momen 'kering' (tanpa aliran) dibuang SEBELUM bos — hemat API + anti sinyal sampah
                     vcls=str(brief.get('vision',{}).get('momentum_class',''))
                     if vcls=='kering':
@@ -552,6 +619,21 @@ def _iterate_inner(once=False):
         variant=str(d.get('variant','')).upper() if isinstance(d,dict) else ''
         if variant=='TIGHT':   sl_pct, tp_rr = SL_PCT*0.67, 2.5   # momentum jelas: SL 0.8%, TP 1:2.5
         elif variant=='WIDE':  sl_pct, tp_rr = SL_PCT*1.5, 4.0    # wick besar: SL 1.8%, TP 1:4 (di balik struktur)
+        # P32 ATR-SL (skill #1 vault — obat 1 SL = 6.6 win): SL mengikuti volatilitas riil.
+        # slSuggest dari market_snapshot (ATR14 x 1.5, clamp 0.8-2.4%). Bos tetap bisa override
+        # via varian WIDE/TIGHT; ATR hanya NAIK-in SL minimum kalau pasar ganas, dan:
+        _P32_ATR_SL=os.environ.get('P32_ATR_SL','1')=='1'
+        if _P32_ATR_SL:
+            try:
+                _ss=((cd.get('brief') or {}).get('slSuggest') or {})
+                _sug=float(_ss.get('sl_pct_suggest') or 0)
+                if _sug>sl_pct and variant!='TIGHT':
+                    sl_pct=_sug  # ATR lebih lebar dari pilihan bos -> ikut ATR (anti SL ketat di pasar wick)
+                tp_rr=max(tp_rr, 2.5)  # RR minimum dijaga
+                if _sug and abs(sl_pct-_sug)<1e-9 and variant in ('','NORMAL'):
+                    log({'event':'atr_sl','symbol':cd['sym'],'atr_suggest':_sug,
+                         'msg':'SL mengikuti ATR14x1.5 (P32)'})
+            except Exception: pass
         # P19 RANGE-POSITION GUARD: SL yang jatuh DI DALAM range 6 jam (72 bar) gampang kena noise/wick.
         # Kasus RUNE 25 Sep 08:01 WIB: LONG @0.6402, SL 1.2% = 0.6325 — cuma 0.06% di atas low range
         # 0.6319 → wick ke low range aja cukup memotong (dan benar terjadi). Solusi: kalau level SL

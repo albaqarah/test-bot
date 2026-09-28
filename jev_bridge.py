@@ -1,26 +1,39 @@
 #!/usr/bin/env python3
 """
 jev_bridge.py — Adapter bos LLM ke TypeSafe jev-1.13 via OpenRouter Decisions API.
-Skema (dicek langsung ke server, 23 Sep 2026):
-  POST {base}  {model, state, questions:{name:{type:'choice'|'score'|'noul',
-                instructions, criteria:{NAMA:'desc'}}}}
-  choice  -> criteria keys = pilihan (probabilities per pilihan + confidence 0..1)
-  Response: {answers:{name:{type, choice, probabilities, confidence}}, usage:{cost}}
-Output adapter = bentuk sama dgn llm_call lightvela: {decision, confidence, reason, key_factor}
+P32 (28 Sep 2026): MULTI-QUESTION 1 request (1 choice + 8 score + 2 noul) + WICK-HUNTER persona.
+Skema: POST {base} {model, state, questions:{name:{type:'choice'|'score'|'noul', instructions, criteria}}}
+  choice -> {choice, probabilities, confidence}; score -> nilai 0-4; noul -> teks.
+Resiliensi (koreksi user 28 Sep): 429 = retry 3 detik (max 2); 402 = raise Jev402
+-> pemanggil (dewa_live.llm_call) fallback ke model berikutnya di .env TANPA istirahat.
 """
-import json, os, urllib.request, time
+import json, os, urllib.request, urllib.error, time
 
 BASE=os.environ.get('JEV_BASE_URL','https://openrouter.ai/api/alpha/decisions')
 KEY=os.environ.get('JEV_API_KEY','')
 MODEL=os.environ.get('JEV_MODEL','typesafe/jev-1.13')
 TIMEOUT=float(os.environ.get('JEV_TIMEOUT','12'))
 
+class Jev402(Exception):
+    """Quota/kredit habis — JANGAN retry, langsung ganti provider."""
+    pass
+
 def _req(payload):
     H={'Authorization':f'Bearer {KEY}','Content-Type':'application/json',
        'HTTP-Referer':'https://github.com/albaqarah/test-bot','X-Title':'dewa-bot'}
-    req=urllib.request.Request(BASE, data=json.dumps(payload).encode(), headers=H, method='POST')
-    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-        return json.load(r)
+    last=None
+    for attempt in range(3):  # 429 -> retry 3 detik (koreksi user); 402 -> langsung raise
+        try:
+            req=urllib.request.Request(BASE, data=json.dumps(payload).encode(), headers=H, method='POST')
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            if e.code==402:
+                raise Jev402('HTTP 402 Payment Required — jev butuh topup')
+            if e.code==429 and attempt<2:
+                time.sleep(3); last=f'HTTP 429 (retry {attempt+1})'; continue
+            raise
+    raise RuntimeError(last or 'jev_req_failed')
 
 PERSONA = """Kamu adalah TYPESAFE SNIPER v3.5 — Money-Flow & SMC Engine scalper TF 5m.
 CORE DIRECTIVE: hasilkan profit konsisten. Bukan penolak pasif — AKTIF cari entry dgn probabilitas
@@ -46,12 +59,45 @@ PIPELINE WAJIB (urut):
    konfirmasi momentum = REJECT.
 6. KONTRAK SL/TP (Dynamic Risk): SL 0.8% (TIGHT) dilarang saat volatilitas/wick besar. Hitung jarak aman
    dari ujung wick terdekat & struktur MSS; pilih WIDE dgn TP 1:4 kalau wick kejam. Lebar SL tetap aman krn
-   notional kecil — yang dijaga adalah RISIKO NOMINAL, bukan persentase.
+   notional kecil — yang dijaga adalah RISIKO NOMINAL, bukan persentase. Referensi: slSuggest.sl_pct_suggest
+   dari kurir (ATR14x1.5) — pakai sebagai patokan lebar SL, override varian kalau wick lebih kejam.
 7. CONFIDENCE BUDGET: skor = keselarasan RSI6(20%)+Volume(30%)+Matrix makro/MSS(50%).
    Total p semua CONFIRMED_* < 0.55 = kamu belum yakin -> REJECT (ragu itu skill, bukan kelemahan).
 8. momentum_class 'kering' (volx<1.2) atau sinyal telat >20 menit -> REJECT.
-   DISIPLIN URUTAN: proses P1 sampai P8 SELALU berurutan — dilarang melompati
-   langkah atau memilih sebelum semua langkah lewat."""
+9. WICK-HUNTER (data kurir 'wickHint' — entry EARLY pucuk/lembah, prioritas bos):
+   - wickHint.dir SEARAH sinyal + strength >= 70 + climax=true -> sinyal MENGUAT: boleh CONFIRMED
+     (prefer TIGHT/NORMAL — SL ketat di balik wick; ini entry pucuk/lembah paling awal).
+   - searah + strength 50-69 -> butuh konfirmasi ke-2 (MSS/FVG searah) baru boleh CONFIRMED.
+   - wickHint.dir LAWAN sinyal + strength >= 70 -> WAJIB REJECT (jangan ayunkan pisau ke wick lawan).
+   - wickHint.dir=NONE atau strength < 50 -> abaikan, nilai pakai pipeline 1-8.
+   - divergence (market.divergence): bear_div melawan LONG / bull_div melawan SHORT = turunkan keyakinan.
+10. MARKET SNAPSHOT (data kurir 'market'): vwap_z (harga vs VWAP): z <= -2 = DISKON (bagus utk LONG,
+    buruk utk SHORT entry); z >= +2 = PREMIUM (bagus utk SHORT, bahaya utk LONG ngekor). squeeze_on=true +
+    breakout vol tinggi = setup momentum terbaik; regime_strength CHOP = percayakan ke fade/rejection,
+    TREND = follow-through. mtf.score: 3/3 penuh = aman; 1/3 = melawan TF besar -> butuh bukti ekstra.
+    book_imb searah + ask/bid wall jadi referensi SL (di balik dinding).
+DISIPLIN URUTAN: proses P1 sampai P10 SELALU berurutan — dilarang melompati langkah
+atau memilih sebelum semua langkah lewat."""
+
+# P32 RUBRIC: 8 dimensi 0-4. timing_freshness & liquidity_risk bobot x2.
+RUBRIC=[
+ ("rs_quality",  "KUALITAS SETUP", "Kualitas setup keseluruhan setelah pipeline 1-10",
+   {"0":"Sinyal sampah/melawan hampir semua lapisan","2":"Setup medioker, bukti campur","4":"Setup teks: makro+MSS+volume+lokasi selaras penuh"}),
+ ("rs_timing",   "TIMING & FRESHNESS (bobot 2x)", "Segar tidaknya entry sekarang (pucuk/lembah)",
+   {"0":"Telat/kejar harga terbang (vwap_z ekstrem lawan)","2":"Netral, harga di tengah jalan","4":"Lemparan awal di pucuk/lembah: wickHint searah strength tinggi ATAU vwap_z diskon/premium + climax"}),
+ ("rs_liquidity","LIKUIDITAS & RISIKO WICK (bobot 2x)", "Risiko kena wick/likuidasi dini",
+   {"0":"SL pasti kena wick: deket wall lawan / ATR ganas / SL di dlm range","2":"Wick biasa, SL standar aman","4":"SL di balik struktur+wall searah, ATR tenang, book_imb searah"}),
+ ("rs_trend",    "TREND ALIGNMENT MTF", "Keselarasan 5m/15m/1h + money-flow",
+   {"0":"Melawan money-flow DAN mtf.score 0-1/3","2":"2/3 atau lawan satu lapisan saja","4":"mtf 3/3 + money-flow searah"}),
+ ("rs_rr",       "RR & LOKASI", "Kualitas risk-reward dari lokasi entry ini",
+   {"0":"RR efektif buruk: entry di lokasi jelek (tengah range/kejar)","2":"RR standar regime","4":"Entry tepat di zona (FVG/wick/EMA) dgn TP multi-R realistis"}),
+ ("rs_crowd",    "POSISI CROWD", "Seberapa crowded posisi lawan/serupa",
+   {"0":"Crowded ekstrem lawan arah: funding ekstrem + OI meledak lawan","2":"Netral (funding/OI tenang)","4":"Crowd kalah arah: funding/OI mendukung gerakan ini"}),
+ ("rs_vol",      "VOLATILITY FIT", "Cocok tidaknya volatilitas dgn gaya scalp 5m",
+   {"0":"Volatilitas mati (dry_up/ADX<15) ATAU ganas gila (ATR>2.5%)","2":"Vol normal","4":"Squeeze_on baru pecah ATAU vol sehat searah"}),
+ ("rs_session",  "SESSION FIT", "Kualitas sesi WIB saat ini",
+   {"0":"OFFHOURS/weekend TradFi logam, volume kopong","2":"Sesi netral","4":"LONDON/NEWYORK utk crypto/logam dgn vol sehat"}),
+]
 
 def _framing(brief):
     """Framing per-source (P17): fade/trend/p6 — scalp sudah punya 'evaluasi' sendiri."""
@@ -70,46 +116,98 @@ def _framing(brief):
         return base+"FADE-LOOSE (P6): fade dengan syarat longgar. Karena longgar, kamu harus LEBIH galak: tanpa bukti berbalik yang jelas → REJECT. Grade B fade bukan izin nekat."
     return base+"Nilai apakah setup ini benar2 layak dieksekusi sekarang. Ragu → REJECT."
 
+def build_questions(brief):
+    """P32: 1 choice + 8 score + 2 noul = 11 pertanyaan dlm SATU request (biaya sama)."""
+    q={"decision":{"type":"choice",
+        "instructions":PERSONA+"\n\nFRAMING SINYAL INI:\n"+_framing(brief),
+        "criteria":{
+          "CONFIRMED_TIGHT":"EXECUTE presisi: setup sempurna — searah money-flow + MSS searah + volume aligned, wick kecil (SL 0.8%, TP 1:2.5)",
+          "CONFIRMED_NORMAL":"EXECUTE standar sehat: searah money-flow ATAU MSS searah, struktur mikro mendukung (SL 1.2%, TP 1:3.5)",
+          "CONFIRMED_WIDE":"EXECUTE dgn risiko wick: arah benar tapi wick/likuiditas ganas — SL di balik struktur (1.8%, TP 1:4). Pilihan UTAMA utk reversal pasca wick-extreme",
+          "REJECT":"LAYAK DITOLAK: lawan money-flow tanpa MSS, momentum kering, telat, atau total CONFIRMED < 0.55. Kalau arah benar tapi harga belum retrace ke FVG, pakai REJECT — kurir bakal nanya lagi saat retrace"
+        }}}
+    for name,label,inst,crit in RUBRIC:
+        q[name]={"type":"score","instructions":f"{label} — {inst}. Skala 0-4.",
+                 "criteria":{k:f"skor {k}: {v}" for k,v in crit.items()}}
+    q["noul_invalidate"]={"type":"noul","instructions":"SATU kalimat: apa yg membuat trade ini GUGUR (invalidasi)?"}
+    q["noul_flip"]={"type":"noul","instructions":"SATU kalimat: sinyal apa yg akan MEMBALIK bias kamu?"}
+    return q
+
+def rubric_total(answers):
+    """Total rubric 0-100 (timing & liquidity x2). Return (total, detail) atau (None,{})."""
+    tot=0.0; maxw=0.0; detail={}
+    for name,label,inst,crit in RUBRIC:
+        a=answers.get(name) or {}
+        val=None
+        for k in ('value','score','choice','confidence'):
+            if isinstance(a.get(k),(int,float)): val=float(a[k]); break
+            if isinstance(a.get(k),str):
+                try: val=float(a[k]); break
+                except Exception: pass
+        if val is None: return None,{}
+        val=max(0.0,min(4.0,val))
+        w=2.0 if name in ('rs_timing','rs_liquidity') else 1.0
+        tot+=val*w; maxw+=4.0*w
+        detail[name]=round(val,1)
+    if maxw<=0: return None,{}
+    return round(tot/maxw*100), detail
+
 def call_jev(brief, symbol=''):
-    """brief = dict briefing (dari dewa_skill.build_briefing). Return {decision,confidence,reason,key_factor}."""
+    """brief = dict briefing (dari dewa_skill.build_briefing + market_snapshot.enrich_market).
+    Return {decision,confidence,reason,key_factor[,variant,rubric,noul]}."""
     if not KEY:
         raise RuntimeError('JEV_API_KEY kosong')
     state=json.dumps(brief, ensure_ascii=False, separators=(',',':'))
-    framing=brief.get('evaluasi') or _framing(brief)
-    p={"model":MODEL,
-       "state":state,
-       "questions":{
-         "decision":{"type":"choice",
-           "instructions":PERSONA+"\n\nFRAMING SINYAL INI:\n"+framing,
-           "criteria":{
-             "CONFIRMED_TIGHT":"EXECUTE presisi: setup sempurna — searah money-flow + MSS searah + volume aligned, wick kecil (SL 0.8%, TP 1:2.5)",
-             "CONFIRMED_NORMAL":"EXECUTE standar sehat: searah money-flow ATAU MSS searah, struktur mikro mendukung (SL 1.2%, TP 1:3.5)",
-             "CONFIRMED_WIDE":"EXECUTE dgn risiko wick: arah benar tapi wick/likuiditas ganas — SL di balik struktur (1.8%, TP 1:4). Pilihan UTAMA utk reversal pasca wick-extreme",
-             "REJECT":"LAYAK DITOLAK: lawan money-flow tanpa MSS, momentum kering, telat, atau total CONFIRMED < 0.55. Kalau arah benar tapi harga belum retrace ke FVG, pakai REJECT — kurir bakal nanya lagi saat retrace"
-           }}}}
+    p={"model":MODEL,"state":state,"questions":build_questions(brief)}
     resp=_req(p)
-    a=resp.get('answers',{}).get('decision',{})
+    ans=resp.get('answers',{}) or {}
+    a=ans.get('decision',{}) or {}
     choice=str(a.get('choice','')).upper()
-    probs=a.get('probabilities',{})
-    # P17: conf = p(TOTAL semua CONFIRMED_*) — apple-to-apples dgn era 2-kriteria (dulu 0.72-0.86).
-    # Dulu pakai p pilihan menang → prob pecah 4 varian bikin conf ACC 0.36 (padahal total 0.77) →
-    # sinyal ragu-ragu lolos gerbang = akar lose 25 Sep.
+    probs=a.get('probabilities',{}) or {}
+    # P17: conf = p(TOTAL semua CONFIRMED_*) — apple-to-apples dgn era 2-kriteria.
     conf=float(sum(float(v) for k,v in probs.items() if str(k).upper().startswith('CONFIRMED')) or probs.get(choice, a.get('confidence',0)))
-    # reason generatif dari data (jev gak nulis teks): pakai probabilitas per pilihan
+    # P32 RUBRIC GATE: total < 50 = KILL (paksa REJECT); 50-64 = FIX/WAIT (REJECT-await);
+    # >= 65 = SHIP (keputusan choice dipertahankan).
+    total, detail = rubric_total(ans)
     pj=', '.join(f"{k} {v:.2f}" for k,v in sorted(probs.items(), key=lambda x:-x[1])[:3])
     reason=f"jev {choice.lower()} (p: {pj})" if pj else f"jev {choice.lower()}"
+    noul=[]
+    for nk in ('noul_invalidate','noul_flip'):
+        na=ans.get(nk) or {}
+        tx=na.get('text') or na.get('value') or (na.get('choice') if isinstance(na.get('choice'),str) else '')
+        if tx: noul.append(str(tx)[:140])
+    out={"decision":None,"confidence":round(conf*100),"reason":reason,"key_factor":'jev',
+         "rubric":total if total is not None else None,"noul":noul}
     if choice.startswith('CONFIRMED'):
         variant=choice.split('_',1)[1] if '_' in choice else 'NORMAL'
-        return {"decision":"CONFIRMED","confidence":round(conf*100),
-                "reason":reason,"key_factor":'jev',"variant":variant}
-    if choice=='REJECT':
-        return {"decision":"REJECT","confidence":round(conf*100),
-                "reason":reason,"key_factor":'jev'}
-    return {"decision":"REJECT","confidence":round(conf*100),
-            "reason":f"jev_unknown_choice:{choice[:30]}","key_factor":'jev'}
+        out["decision"]="CONFIRMED"; out["variant"]=variant
+    elif choice=='REJECT':
+        out["decision"]="REJECT"
+    else:
+        out["decision"]="REJECT"; out["reason"]=f"jev_unknown_choice:{choice[:30]}"
+    if total is not None:
+        if total<50:
+            out["decision"]="REJECT"
+            out["reason"]+=f" [RUBRIC KILL {total}<50: {detail}]"
+        elif total<65 and out["decision"]=="CONFIRMED":
+            out["decision"]="REJECT"
+            out["reason"]+=f" [RUBRIC WAIT {total} 50-64: {detail}]"
+        else:
+            out["reason"]+=f" [rubric {total}: {detail}]"
+        out["rubric_detail"]=detail
+    return out
 
 if __name__=='__main__':
-    # smoke: python3 jev_bridge.py
+    # smoke offline: build_questions + rubric_total (TANPA API call)
     b={"symbol":"BTCUSDT","grade":"A","side":"SHORT","score":{"z":2.15,"rsi":84.1},
        "regime":"RANGE","funding":0.0001,"vol_x":1.7,"wick_rejection":True}
-    print(json.dumps(call_jev(b), ensure_ascii=False))
+    qs=build_questions(b)
+    print('questions:', list(qs.keys()))
+    fake={'rs_quality':{'value':3},'rs_timing':{'value':3},'rs_liquidity':{'value':2},
+          'rs_trend':{'value':4},'rs_rr':{'value':3},'rs_crowd':{'value':1},
+          'rs_vol':{'value':2},'rs_session':{'value':3}}
+    print('rubric_total:', rubric_total(fake)[0], '(harus 65 — bobot timing/liq 2x)')
+    fake2=dict(fake); fake2['rs_timing']={'value':4}; fake2['rs_liquidity']={'value':4}
+    print('rubric_total partial-max:', rubric_total(fake2)[0], '(harus 80)')
+    fake3={k:{'value':4} for k,_ in [(n,0) for n,_,_,_ in RUBRIC]}
+    print('rubric_total ALL-4:', rubric_total(fake3)[0], '(harus 100)')
