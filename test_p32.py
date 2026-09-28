@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""Unit test P32 offline: jev402_hit, notif anti-spam, llm_call end-to-end (jev 402 -> chain fallback)."""
+"""Unit test P32 offline: jev402_hit, notif anti-spam, llm_call end-to-end (jev 402 -> chain fallback).
+Path-relatif (clone-safe): test ini jalan dari root repo."""
 import importlib.util as iu, json, os, sys
 
 def load(name, path):
     sp=iu.spec_from_file_location(name, path); m=iu.module_from_spec(sp); sp.loader.exec_module(m); return m
 
+_HERE=os.path.dirname(os.path.abspath(__file__))
 os.environ['TG_BOT_TOKEN']=''; os.environ['TG_CHAT_ID']=''
-jb=load('jev_bridge','/home/agentuser/jev_bridge.py')
-dl=load('dewa_live','/home/agentuser/dewa_live.py')
+jb=load('jev_bridge', os.path.join(_HERE,'jev_bridge.py'))
+dl=load('dewa_live', os.path.join(_HERE,'dewa_live.py'))
 
 # 1) jev402_hit
 e=jb.Jev402('HTTP 402 Payment Required — jev butuh topup')
