@@ -216,4 +216,37 @@ Kandidat pengembangan v2: engulfing-filter, harami, dual-shadow, momentum-exhaus
 
 ---
 
+### G. SKILL TAMBAHAN DARI VAULT (bedah user 28 Sep — "cuma 47 dari 5.806?")
+
+Jawaban: 47 itu CUMA keluarga wick/reversal. Setelah dikategorikan ulang SEMUA
+5.806 file, ada 10 keluarga skill bernilai untuk bot. Diterima ke P32 (semua
+host-side gratis, JEV tetap hakim):
+
+| # | Skill | Sumber vault | Jml spec | Nilai buat bot |
+|---|---|---|---|---|
+| 1 | **ATR dynamic SL / trailing** (chandelier) | 320 spec | Masalah #1 bot: 1 SL = 6.6 win. SL = 1.5×ATR14, trail = chandelier 3×ATR — SL mengikuti volatilitas, bukan persen mati |
+| 2 | **Multi-indicator CONSENSUS** (skor 0-100) | 356 spec | Konsep sama dgn Trade Rubric — 5+ indikator vote, bukan 1 sinyal. rubric_quality_setup dapat nilai mentahnya |
+| 3 | **VWAP premium/discount** | 49 spec | Harga vs VWAP ±1σ/2σ: di bawah -2σ = diskon (LONG grade naik), di atas +2σ = premium (SHORT). Obat entry pucuk FIL/ARB |
+| 4 | **Divergence RSI6** (regular+hidden) | 61 spec | Harga pucuk baru + RSI6 turun = divergence → timing_freshness turun / hint early-exit |
+| 5 | **MTF alignment** (5m/15m/1h) | 193 spec | Bos lihat 3 TF sekarang → trend_alignment 3/3 2/3 1/3 |
+| 6 | **Volume konfirmasi** (OBV/CVD/vol_x) | 159 spec | Sudah ada sebagian (vol_x, OBV) — tambah dry-up (volume kering sebelum breakout = jebakan) |
+| 7 | **Volatility SQUEEZE** (BB dalam Keltner) | 15 spec | Kompresi = koin tidur → BREAKOUT
+ nyusul. Squeeze ON + breakout vol_x≥2 = setup momentum terbaik; tanpa squeeze, breakout vol rendah = KILL |
+| 8 | **Regime filter (ADX/chop)** | 73 spec | ADX<20 = chop → pakai aturan fade/mean-revert; ADX≥20 = trend → pakai aturan follow. Persona bos dapat regime ini eksplisit |
+| 9 | **Session timing** (London/NY/Asia) | 11 spec | Volatilitas per sesi — timing session_fit rubric pakai data nyata, bukan tebakan |
+| 10 | **Trend-pullback entry** | 78 spec | Entry saat pullback ke MA/dense-zone, bukan kejar candle (obat FOMO di atas) |
+
+**PRIORITAS IMPLEMENTASI (urutan, bukan semua sekaligus):**
+1. ATR-SL + chandelier trail (skill #1) — langsung obat matematika kekalahan
+2. VWAP premium/discount (skill #3) — murah (klines sudah ada), obat pucuk
+3. Squeeze + regime ADX (skill #7+8) — sinyal jadi punya konteks volatilitas
+4. Divergence RSI6 (skill #4) — timing keluar/entry pucuk
+5. Session timing (skill #9) — polish terakhir
+
+Yang TIDAK diambil (dengan alasan): Grid/DCA/martingale (61+50 spec — melanggar
+disiplin SL, dead-margin), MachineLearning (4 — overfit, tak bisa diaudit),
+arbitrage/market-making (27+9 — butuh infra co-lo, bukan domain scalper 5m).
+
+---
+
 *Dokumen ini dikunci atas permintaan user. Jangan diubah tanpa ACC.*
