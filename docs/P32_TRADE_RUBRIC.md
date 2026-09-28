@@ -63,13 +63,19 @@ jadi ini pemborosan kapasitas, bukan keterbatasan model.
   (kasus NEAR SHORT di lembah 26 Sep 19:39, BCH LONG inversion)
 - **Hard rule:** kalau `is_fresh < 0.35` → maksimum FIX, tidak bisa SHIP
 
-### 2.3 Hemat API (dari jev-curate)
+### 2.3 RESILIENSI BOS (revisi user 28 Sep 2026 — MENGGANTIKAN "istirahat 10 menit")
 
-- **Host-side pruning** SEBELUM panggil JEV: buang kandidat dengan
-  volume mati / regime ngaco / jarak SL tak masuk akal → nol biaya API
-- **Adaptive backoff**: saat `402` / `429` / timeout → istirahat 10 menit
-  (BUKAN retry 3 detik). Ini obat langsung buat insiden watchdog 900 dtk
-  yang bikin bot bunuh diri (`os._exit(99)`) lalu PM2 restart → notif BOT START palsu.
+- **402 (Payment Required)** → **fallback OTOMATIS ke model berikutnya di .env**
+  (`BOS_PROVIDER` chain: jev → lightvela → …). **Gak ada istirahat total selama masih ada model.**
+  Notif TG khusus: `⚠️ BOS JEV 402 — BUTUH TOPUP. Fallback → lightvela` (sekali per jam, bukan spam).
+- **429 (rate limit)** → **retry otomatis 3 detik** (sama dgn perilaku retry yang sudah ada),
+  maksimal 2× per kandidat; kalau tetap gagal → fallback ke model berikutnya + log.
+- **SEMUA model di .env kena 402** → BARU bot diem total (loop tetap jalan, tidak ada keputusan bos)
+  dan kirim notif TG `🔴 SEMUA BOS 402 — BOT IDLE (butuh topup)`.
+  **JANGAN bunuh diri / restart**: iterasi jalan terus tanpa llm_call → watchdog 900 dtk aman
+  (obat akar insiden exit 99 + notif BOT START palsu).
+- **Notifikasi real-time, bukan "BOT START"**: setiap perubahan status bos (402/429/fallback/recover)
+  dikirim ke Telegram dgn data nyata (model mana, error apa, jam berapa).
 
 ---
 
@@ -146,6 +152,67 @@ mtf: {
   kena watchdog 900 dtk (insiden exit 99 → restart → notif BOT START palsu)
 - Kalau endpoint gagal → field di-skip (None), JEV tetap dinilai dengan data yang ada;
   **jangan** batalkan seluruh keputusan gara-gara 1 sumber error
+
+---
+
+### F. WICK-HUNTER (approved 28 Sep 2026 — dari The-Quant-Trading-Vault)
+
+Tujuan user verbatim: "agar dia bisa lihat momentum signal chart pair mana yang
+akan wick mau long & wick mau short (agar kita dapat signal early entry di
+pucuk/lembah)". Kurir deteksi dulu (host-side, gratis), JEV nilai final.
+
+**Sumber formula (strategi teruji, author ChaoZhang/TradingView):**
+- `Hammer-and-Shooting-Star-Pattern-Trading-Strategy` — ATR filter + Fib 33.3%
+- `Fundamental-Pinbar-Trading-Strategy` — pinbar + MA trend + SL 1.9×ATR, RR 3.1
+- `Dual-Shadow-Reversal-Strategy` — candle tanpa shadow beruntun
+- `Momentum-Exhaustion-Strategy` — Exhaustion oscillator: (C+H+L − MA(C+H+L)) / MA(C+H+L)
+
+**Deteksi kurir (host-side, per pair per bar — NOL biaya API):**
+
+```
+c = candle terakhir (5m), rng = h-l, body = |c-o|
+ATR14 = ATR 14-bar
+
+1. WICK_REJECTION (inti):
+   upper_wick = h - max(o,c) · lower_wick = min(o,c) - l
+   pin_up   = upper_wick >= 2*body DAN upper_wick >= 0.55*rng  → "mau SHORT" (reject pucuk)
+   pin_down = lower_wick >= 2*body DAN lower_wick >= 0.55*rng  → "mau LONG"  (reject lembah)
+
+2. HAMMER / SHOOTING STAR (konfirmasi arah):
+   hammer        = lower_wick >= 2*body DAN close >= o + 0.333*rng (close di atas fib 33.3%)
+   shooting_star = upper_wick >= 2*body DAN close <= o + 0.333*rng
+   (ATR filter: rng dalam 0.5×ATR … 2.5×ATR — buang candle abis/gidang)
+
+3. EXHAUSTION OSC (lembah/pucuk terukur):
+   ex_t  = (c+h+l) ; ex = (ex_t - MA20(ex_t)) / MA20(ex_t)
+   ex > +X_atas → momentum over-extended (pucuk) ; ex < −X_bawah → lembah
+   (X dikalibrasi dari data 30 hari per pair — jangan hardcode)
+
+4. VOLUME CLIMAX:
+   vol_ratio = v / MA20(v) ; climax = vol_ratio >= 2.0 PADA bar wick
+   (wick + climax = rejection serius; wick tanpa volume = noise)
+
+5. OUTPUT "wickHint" ke brief (2 arah):
+   wickHint: {dir: 'SHORT'|'LONG'|'NONE', pattern: 'pin_up|pin_down|hammer|shooting_star',
+              strength: 0-100, ex_score, vol_ratio}
+   strength = weighted(ukuran wick, posisi di range, ex_score, vol_ratio)
+
+**Persona JEV (tambahan langkah WICK-HUNTER):**
+- wickHint searah sinyal + strength ≥ 70 → boleh CONFIRMED (prefer TIGHT/NORMAL —
+  ini entry EARLY di pucuk/lembah, SL ketat di balik wick)
+- wickHint searah + strength 50-69 → butuh konfirmasi ke-2 (FVG/MSS) baru boleh CONFIRMED
+- wickHint lawan sinyal + strength ≥ 70 → WAJIB REJECT (mengayunkan pisau ke wick lawan)
+- nilai `strength` masuk hitungan rubric `timing_freshness` & `liquidity_risk`
+- Nama kurir tak berubah: wickHint hanya DATA; keputusan tetap bos.
+
+**Anti-false-signal (hard rule kurir):**
+- Wajib ATR filter (candle gak gila) DAN close-complete (bukan bar berjalan)
+- Di TREND kuat searah (1h), hint fade dikurangi bobotnya (fade melawan 1h = butuh strength lebih tinggi)
+- Log semua wickHint → `dewa_live_log.jsonl` buat backtest akurasi pattern 30 hari
+
+**Referensi tambahan:** The-Quant-Trading-Vault (brainbrick-trades) — 5.806 spec
+terindeks di /tmp/vault (clone lokal). 47 file relevan pattern wick/reversal.
+Kandidat pengembangan v2: engulfing-filter, harami, dual-shadow, momentum-exhaustion.
 
 ---
 
