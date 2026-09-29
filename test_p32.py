@@ -4,10 +4,12 @@ P35: fallback chain DIHAPUS — jev error = REJECT jev_err (tanpa model kedua)."
 import os, sys, json, tempfile, importlib
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-os.environ.setdefault('JEV_BASE_URL','http://127.0.0.1:1')  # port mati -> koneksi gagal
-os.environ.setdefault('JEV_TIMEOUT','2')
+import dewa_live as dl  # P36: import DULU (.env OVERRIDE penuh), baru timpa env utk test
+# P35b: .env SELALU menang atas setdefault -> dulu test ini malah nembak API beneran.
+# jev_bridge baca env saat di-import (lazy di llm_call), jadi timpa SETELAH import = aman.
+os.environ['JEV_BASE_URL']='http://127.0.0.1:1'  # port mati -> koneksi gagal
+os.environ['JEV_TIMEOUT']='2'
 os.environ['JEV_API_KEY']='test-dummy-key'
-import dewa_live as dl
 
 # 1) jev402_hit
 class E402(Exception): pass
