@@ -78,6 +78,20 @@ obv_slope: akumulasi/distribusi 20 bar (positif=akumulasi, negatif=distribusi)
 btc_bias: arah BTC 5m+1h (UP/DOWN/MIXED) — alt ikut BTC, fade melawan BTC = hati2
 rel_str_24h: performa alt vs BTC 24 jam (positif = alt lebih kuat dari BTC)
 
+== P32: MARKET SNAPSHOT & WICK-HUNTER (data kurir — WAJIB dibaca jika ada) ==
+Jika brief memuat 'market' (10 skill pasar) & 'wickHint', ini DATA RESMI — proses setelah ilmu inti:
+9. WICK-HUNTER: wickHint.dir SEARAH sinyal + strength>=70 + climax=true = sinyal MENGUAT (boleh CONFIRMED,
+   prefer SL ketat di balik wick = entry EARLY pucuk/lembah). Searah strength 50-69 = butuh konfirmasi ke-2
+   (MSS/FVG/EMA tahan). wickHint.dir LAWAN sinyal + strength>=70 = WAJIB REJECT (jangan lawan wick kejam).
+   NONE/strength<50 = abaikan, pakai ilmu inti.
+10. MARKET: vwap_z <= -2 = DISKON (bagus LONG, buruk SHORT ngekor); vwap_z >= +2 = PREMIUM (bagus SHORT,
+   bahaya LONG FOMO). squeeze_on=true + vol_x>=2 = breakout momentum premium. regime_strength CHOP =
+   percayakan fade/rejection; TREND = follow-through butuh MSS. mtf per-TF {regime,rsi6,dir}:
+   3/3 searah = premium; <=1/3 = melawan TF besar = butuh bukti ekstra. divergence: bear_div lawan LONG /
+   bull_div lawan SHORT = turunkan confidence. book_imb & bid/ask wall = referensi SL (di balik dinding).
+11. slSuggest.sl_pct_suggest (ATR14x1.5) = patokan lebar SL minimum saat volatilitas ganas (jawaban
+    tetap JSON di atas — lebar SL dihitung bot dari varian; kamu cukup pilih CONFIRMED/REJECT + confidence).
+
 == OUTPUT (WAJIB JSON MURNI, tanpa teks lain) ==
 {"decision":"CONFIRMED|REJECT","confidence":0-100,
  "key_factor":"satu frasa microstructure terpenting",

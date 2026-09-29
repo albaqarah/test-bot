@@ -222,13 +222,18 @@ def jev402_hit(e):
 def _notify_bos_down(kind, detail=''):
     """P32: notif TG data-real (bukan 'BOT START'). Max 1x/jam per kind — anti spam.
     kind='402'      -> jev/downstream 402, fallback jalan (bot TIDAK diem).
-    kind='402_all'  -> SEMUA provider 402 -> bot diem total (spec user)."""
+    kind='402_all'  -> SEMUA provider 402 -> bot diem total (spec user).
+    P33 ANTI-SPAM FIX: flag disimpan di file TERPISAH (dewa_notify_flag.json) —
+    dulu pakai dewa_live_state.json yang di-overwrite st-memori loop -> spam 315x/24h."""
     try:
-        st=load_state()
+        flagf=os.path.join(os.path.dirname(os.path.abspath(__file__)),'dewa_notify_flag.json')
         now=time.time()
+        try: flags=json.load(open(flagf))
+        except Exception: flags={}
         key=f'bos_down_{kind}'
-        if now-st.get(key,0) < 3600: return
-        st[key]=now; save_state(st)
+        if now-flags.get(key,0) < 3600: return
+        flags[key]=now
+        json.dump(flags, open(flagf,'w'))
         bot_provider=BOS_PROVIDER or 'jev'
         fb=os.environ.get('BOS_FALLBACKS','lightvela')
         if kind=='402_all':
