@@ -25,13 +25,16 @@ P31a_BATTERY_ON=False  # P31a: OFF = persona jev v3.5 murni (rollback strategi 2
 from datetime import datetime, timezone
 
 def _load_env(path=None):
+    """P35b: baca .env dgn OVERRIDE PENUH (bukan setdefault).
+    Alasan: pernah kejadian env warisan shell/PM2 (JEV_API_KEY dummy dari unit test) MENANG
+    atas .env -> bot 401/402 nggak jelas. .env = sumber kebenaran, selalu menang."""
     path=path or os.path.join(os.path.dirname(os.path.abspath(__file__)),'.env')
     try:
         for line in open(path):
             line=line.strip()
             if line and not line.startswith('#') and '=' in line:
                 k,v=line.split('=',1)
-                os.environ.setdefault(k.strip(), v.strip())
+                os.environ[k.strip()]=v.strip()
     except Exception: pass
 _load_env()
 
