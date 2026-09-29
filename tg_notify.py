@@ -128,7 +128,7 @@ def _mode_line():
 
 def _bos_line():
     prov=os.environ.get('BOS_PROVIDER','jev').strip().lower()
-    return "🤖 🟢 JEV" if prov=='jev' else "🤖 🟢 lightvela"
+    return "🤖 🟢 JEV"
 
 def _saldo(saldo, tag=False):
     """P22: saldo utk display — wallet REAL kalau LIVE, virtual kalau DRY.

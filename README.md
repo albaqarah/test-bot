@@ -33,7 +33,7 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 ### P18: Rekap reset tiap morning briefing
 - Notif EXIT: `REKAP HARI INI` (bukan 24 jam rolling); ENTRY: `📊 Hari ini ...`
 - Briefing SELALU rekap 24 jam penuh → setelah terkirim, rekap notif mulai 0/0 (marker `.dewa_briefing_mark`)
-- Fallback: tanpa marker → rolling 24 jam (perilaku lama)
+- Tanpa marker → rolling 24 jam (perilaku lama)
 
 ## CHANGELOG v6.3 (24 Sep malam) - TRADFI GATE + NOTIF v15 STYLE
 
@@ -60,7 +60,7 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 
 ### Bos LLM: JEV (TypeSafe jev-1.13)
 - **BOS_PROVIDER=jev** di .env — keputusan typed via OpenRouter Decisions API: 0.3-0.6 dtk, probabilitas per opsi, $0.0000165/keputusan
-- Failover otomatis ke lightvela kalau jev error (`jev_fallback` di log)
+- **FULL JEV NO-FALLBACK (P35)**: jev satu-satunya bos; error sesaat = kandidat diulang iterasi berikutnya (`jev_err` di log)
 - **P11**: bos pilih varian eksekusi SL/TP per-sinyal: TIGHT (SL 0.8% TP 1:2.5) / NORMAL / WIDE (SL 1.8% TP 1:4, anti-wick) — engine lama tetap fallback
 
 ### P10b: Trailing Profit Lock (breakeven asli)
@@ -73,7 +73,7 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 - Breakout LONG dilarang saat RSI(6) > 85; breakout SHORT dilarang saat RSI(6) < 15 (kasus RUNE 10:00 WIB: breakout beli di RSI6 97)
 
 ### P13: Vision Pack (bos & kurir bisa "lihat")
-- Briefing bos + `vision`: RSI(6) realtime + sparkline 12 bar, momentum_class (wick_extreme / momentum_fallback / mean_reversion / breakout / kering), last bar OHLCV
+- Briefing bos + `vision`: RSI(6) realtime + sparkline 12 bar, momentum_class (wick_extreme / momentum / mean_reversion / breakout / kering), last bar OHLCV
 - Kurir gate: momen `kering` (volx<1.0) dibuang sebelum bos (hemat API)
 - Bukti: replay RUNE 10:00 → dulu CONFIRMED conf 40 (boncos), kini REJECT conf 61 dgn konteks pucuk terbaca
 
@@ -116,7 +116,7 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
   + breakout (volx>2.5, body>60%) + konfirmasi OBV 10-bar searah + volx>=1.2
 - Backtest 30 hari (41 pair, ekonomi bot asli): 11.528 trade, avg +$0.117, PnL virtual +$1.354
 - FRESHNESS GATE: sinyal scalp hanya dikirim ke bos LLM jika umur <=4 bar (20 menit) - sinyal tua bikin
-  backlog LLM 30-45 detik/keputusan (lightvela reasoning burn) dan scalping gak nunggu 90 menit
+  backlog LLM dan scalping gak nunggu 90 menit
 
 ### P6 - Fade Longgar (TOGGLE, default OFF)
 - `gen_loose_fade`: varian A (z>=3.0 bypass wick-gate) + varian B (RSI 70/30 + z>2.5)
@@ -226,7 +226,7 @@ MAXHOLD_CHOP=96       # max hold chop (96 bar = 8 jam)
 COOLDOWN_MIN=30       # anti re-entry pair baru exit (menit)
 SCAN_SEC=60           # jeda antar scan idle (detik)
 MIN_CONF=55           # P17: gerbang conf minimum (p total CONFIRMED*); 0 = off
-BOS_PROVIDER=jev      # bos LLM: jev (utama) | lightvela — fallback otomatis ke lightvela
+BOS_PROVIDER=jev      # P35: FULL JEV — satu bos, TANPA fallback
 TRAIL=on              # P10b trailing profit lock
 ```
 > ⚠️ Jangan taruh komentar di belakang angka? Boleh — parser nge-strip `#` otomatis.
@@ -307,7 +307,7 @@ Data (Binance klines 5m/1h + funding + TradingView multi-TF)
 | File | Peran |
 |---|---|
 | `dewa_live.py` | Mesin utama live/dry-run + panel tuning loader + report + briefing |
-| `dewa_skill.py` | System prompt skill dewa (inject ke bos LLM) + instruksi CHOP SNIPER |
+| `dewa_skill.py` | Kurir: susun briefing/ekstra utk bos jev (persona ada di jev_bridge) |
 | `order_guard.py` | Janitor SL/TP + max posisi global + eksekusi order LIVE |
 | `order_cleanup.py` | Bersihkan SL/TP nyantol setelah posisi close |
 | `tg_notify.py` | Notifikasi Telegram (entry/exit/briefing, RR dinamis, label CHOP/TREND) |
@@ -315,8 +315,12 @@ Data (Binance klines 5m/1h + funding + TradingView multi-TF)
 | `hybrid_rules.py` | Kurir hybrid: fade-ekstrem + trend pullback |
 | `dewa_supervisor.sh` | Auto-restart loop (while-true, 5 detik) |
 | `position_watchdog.sh` | Watchdog SL/TP fallback-only (respect file-lock) |
-| `dewa_dryrun.py` | Dry run replay historis (LLM beneran dipanggil) |
 | `tv_bridge.js` | Bridge TradingView (EMA/RSI multi-TF; metals via OANDA) |
+| `jev_bridge.py` | P32: bridge jev decisions API (11 pertanyaan 1 request, rubric, gate 50/65) |
+| `market_snapshot.py` | P32: snapshot pasar (ATR/VWAP/squeeze/MTF/divergence/walls/OI/WICK-HUNTER) |
+| `test_p32.py` / `test_p33.py` | Unit test offline (jev-only, anti-spam, rubric 5-tingkat) |
+| `test_p34_calib.py` / `test_p34_bad.py` | Kalibrasi rubric live jev (sempurna/sedang/jelek) |
+| `close_all_p31a.py` | Utility darurat: paksa-close semua posisi + bersihin SL/TP |
 
 ## HASIL BACKTEST (jujur)
 

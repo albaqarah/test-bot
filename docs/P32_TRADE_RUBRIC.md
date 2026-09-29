@@ -2,7 +2,7 @@
 
 > Status: **DIKUNCI / APPROVED oleh user (27 Sep 2026)** — BELUM DIIMPLEMENTASI.
 > Nunggu topup TYPESAFE_API_KEY (JEV). Saat ini API JEV balas `HTTP 402 Payment Required`
-> → bot jalan pakai fallback lightvela.
+> → **P35: FULL JEV NO-FALLBACK.** Tanpa model cadangan.
 > **Begitu user bilang "udah topup", langsung eksekusi implementasi ini.**
 
 ---
@@ -13,7 +13,7 @@ Repo referensi:
 - `monteduro/killmyidea` — 8 pertanyaan `score` 0–4 paralel dalam SATU request → weighted avg → KILL/FIX/SHIP
 - `AkashPriyadarshii/jev-curate` — host-side pruning + adaptive token bucket + auto-429 backoff, 1500 baris/detik
 - `browser-use/jev-ultrafast` — 1 request = 1 decision cycle, structured state (bukan screenshot)
-- `lukaske/jev-doom-agent` — validasi `choice` + `probabilities` + `confidence`, fallback ditandai terang-terangan
+- `lukaske/jev-doom-agent` — validasi `choice` + `probabilities` + `confidence`
 
 **Kondisi bot sekarang:** `jev_bridge.call_jev` cuma kirim **SATU** pertanyaan
 (`decision` type `choice`, 4 opsi). Tiap kandidat = 1 HTTP request buat 1 bit informasi.
@@ -65,16 +65,16 @@ jadi ini pemborosan kapasitas, bukan keterbatasan model.
 
 ### 2.3 RESILIENSI BOS (revisi user 28 Sep 2026 — MENGGANTIKAN "istirahat 10 menit")
 
-- **402 (Payment Required)** → **fallback OTOMATIS ke model berikutnya di .env**
-  (`BOS_PROVIDER` chain: jev → lightvela → …). **Gak ada istirahat total selama masih ada model.**
-  Notif TG khusus: `⚠️ BOS JEV 402 — BUTUH TOPUP. Fallback → lightvela` (sekali per jam, bukan spam).
+- **402 (Payment Required)** → **notif TG topup** (sekali per jam, anti-spam P33).
+  **P35: TANPA fallback** — keputusan DITUNDA sampai topup; scan & sistem tetap hidup,
+  kandidat diulang di iterasi berikutnya.
 - **429 (rate limit)** → **retry otomatis 3 detik** (sama dgn perilaku retry yang sudah ada),
-  maksimal 2× per kandidat; kalau tetap gagal → fallback ke model berikutnya + log.
+  maksimal 2× per kandidat; kalau tetap gagal → kandidat dilewati + log (`jev_err`).
 - **SEMUA model di .env kena 402** → BARU bot diem total (loop tetap jalan, tidak ada keputusan bos)
   dan kirim notif TG `🔴 SEMUA BOS 402 — BOT IDLE (butuh topup)`.
   **JANGAN bunuh diri / restart**: iterasi jalan terus tanpa llm_call → watchdog 900 dtk aman
   (obat akar insiden exit 99 + notif BOT START palsu).
-- **Notifikasi real-time, bukan "BOT START"**: setiap perubahan status bos (402/429/fallback/recover)
+- **Notifikasi real-time, bukan "BOT START"**: setiap perubahan status bos (402/429/recover)
   dikirim ke Telegram dgn data nyata (model mana, error apa, jam berapa).
 
 ---

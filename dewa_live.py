@@ -8,7 +8,7 @@ Struktur = persis breakdown yang sudah di-review user:
 1. Data      : Binance klines 5m/1h + funding; TV multi-TF via tv_bridge.js (best effort)
 2. Kurir     : reversion_bot.gen_signals (RSI+z-score+wick+volume, Wilder RSI)
 3. Grade     : A (climax+wick ekstrem) / B (inti) — C tidak pernah disetor
-4. Bos       : dewa_skill.SYSTEM_PROMPT, 1 LLM agent, output JSON
+4. Bos       : jev (decisions API, typed) — FULL JEV NO-FALLBACK (P35)
 5. Risk      : order_guard.MAX_GLOBAL_POSITIONS=5, 1 posisi/pair
 6. Eksekusi  : entry open candle berikutnya, margin $2, lev 10x,
                SL max(0.35%,0.4%), TP 3R, BE-shift +0.1% -> +0.06%, max hold 480 bar
@@ -37,10 +37,8 @@ _load_env()
 
 spec=importlib.util.spec_from_file_location('vg',os.path.join(os.path.dirname(os.path.abspath(__file__)),'v15_grade.py'))
 vg=importlib.util.module_from_spec(spec); spec.loader.exec_module(vg)
-spec2=importlib.util.spec_from_file_location('btf',os.path.join(os.path.dirname(os.path.abspath(__file__)),'backtest_v15x_final.py'))
-btf=importlib.util.module_from_spec(spec2); spec2.loader.exec_module(btf)
 import reversion_bot as rb
-import dewa_skill as ds
+import dewa_skill as ds  # P35: dipakai build_extras/build_briefing/enrich_briefing (kurir) — BUKAN bos
 import order_guard as og
 import tg_notify as tg
 import order_cleanup as oc
@@ -133,7 +131,8 @@ def fund_last(sym):
 def tv_ta(sym):
     """TV multi-TF best-effort; None kalau down."""
     try:
-        from bot_v15_unified import TV_SYMBOL_MAP
+        TV_SYMBOL_MAP={"XAUUSDT":"OANDA:XAUUSD","XAGUSDT":"OANDA:XAGUSD",
+                       "XPTUSDT":"OANDA:XPTUSD","PAXGUSDT":"OANDA:XAUUSD"}
         sym2=TV_SYMBOL_MAP.get(sym, f"BINANCE:{sym}")
         out=subprocess.run(["node",os.path.join(os.path.dirname(os.path.abspath(__file__)),"tv_bridge.js"),sym2],
                            capture_output=True,text=True,timeout=40)
@@ -142,72 +141,24 @@ def tv_ta(sym):
     except Exception:
         return None
 
-BOS_PROVIDER=os.environ.get('BOS_PROVIDER','jev').strip().lower()   # 'jev' | 'lightvela' (.env)
+BOS_PROVIDER='jev'  # P35: FULL JEV — satu bos, TANPA fallback
 
 def llm_call(brief):
-    # P-jev: jev = bos utama (0.6 dtk, typed, no_json impossible); error -> fallback lightvela otomatis
-    # P32 RESILIENSI (koreksi user 28 Sep): 402 = jev quota habis -> GANTI PROVIDER (chain .env
-    # BOS_FALLBACKS), TANPA istirahat. 429 ditangani di dalam jev_bridge (retry 3s x2).
-    # Loop TIDAK PERNAH tidur panjang; scan tetap hidup selalu.
-    if BOS_PROVIDER=='jev':
-        try:
-            import jev_bridge
-            r=jev_bridge.call_jev(brief)
-            if r.get('decision') in ('CONFIRMED','REJECT'):
-                return r
-            raise RuntimeError('jev bad response')
-        except Exception as e:
-            _is402 = jev402_hit(e)
-            log({'event':('jev_402' if _is402 else 'jev_fallback'),'msg':str(e)[:100]})
-            if _is402: _notify_bos_down('402', str(e))
-    base=os.environ.get("LLM_BASE_URL")
-    key=os.environ.get("LLM_API_KEY") or os.environ.get("CUSTOM_API_KEY")
-    if not base:
-        try:
-            line=[l for l in open(os.path.expanduser('~/.hermes/config.yaml')) if 'base_url' in l][0]
-            base=line.split('base_url:')[1].strip().split()[0]
-        except Exception: return {"decision":"REJECT","confidence":0,"reason":"no_llm_config"}
-    if not key: return {"decision":"REJECT","confidence":0,"reason":"no_api_key"}
-    import urllib.request
-    # ANTI-REASONING-BURN: gateway 'auto' = model reasoning; briefing penuh bikin dia
-    # habis-kan semua token buat thinking -> JSON final gak pernah ditulis (finish=length).
-    # Instruksi keras: langsung JSON (terbukti: reasoning 4885->3454 tok, finish=stop, 27s)
-    FORCE_JSON=("\n\nOutput WAJIB: SATU baris JSON murni, mulai langsung dengan { tanpa teks pembuka:\n"
-                '{"decision":"CONFIRMED"|"REJECT","confidence":0-100,"reason":"maksimal 20 kata","key_factor":"maksimal 12 kata"}\n'
-                "JANGAN jelaskan proses berpikir. JANGAN tulis analisis. LANGSUNG JSON-nya saja.")
-    # P32 CHAIN fallback dari .env BOS_FALLBACKS (koma). Coba berurutan; 402 = lompat model
-    # berikutnya TANPA tidur; error lain (429/timeout) = retry 3 detik (max 2) per model.
-    fb=[m.strip() for m in os.environ.get('BOS_FALLBACKS','').replace(' ', ',').split(',') if m.strip()]
-    if not fb: fb=[os.environ.get("LLM_MODEL","auto")]
-    last_err='unknown'; _402set=set()
-    for model in fb:
-        body=json.dumps({"model":model,"temperature":0.1,"max_tokens":1500,
-            "messages":[{"role":"system","content":ds.SYSTEM_PROMPT+FORCE_JSON},
-                        {"role":"user","content":json.dumps(brief)}]}).encode()
-        req=urllib.request.Request(base.rstrip('/')+"/chat/completions",data=body,
-            headers={"Authorization":f"Bearer {key}","Content-Type":"application/json"})
-        for attempt in range(2):
-            try:
-                with urllib.request.urlopen(req,timeout=60) as r:
-                    msg=json.loads(r.read())["choices"][0]["message"]
-                txt=(msg.get("content") or "").strip()
-                if not txt:
-                    txt=(msg.get("reasoning_content") or "").strip()
-                i,j=txt.find("{"),txt.rfind("}")
-                if i<0 or j<=i:
-                    raise ValueError("no_json_in_response")
-                return json.loads(txt[i:j+1])
-            except Exception as ex:
-                last_err=str(ex)[:50]
-                if '402' in last_err or 'Payment Required' in last_err:
-                    _402set.add(model)
-                    break  # keblok -> lompat ke model berikutnya, JANGAN tidur
-                time.sleep(3)  # retry cepat 3 detik (koreksi user 429), max 2x per model
-    if _402set:
-        # SEMUA model 402 = bot diem total (spec user); sebagian = masih ada fallback
-        _all = len(_402set)>=len(fb)
-        _notify_bos_down('402_all' if _all else '402', f'402 di {sorted(_402set)}; err terakhir: {last_err}')
-    return {"decision":"REJECT","confidence":0,"reason":f"llm_err:{last_err}"}
+    # P35 FULL JEV NO-FALLBACK (komando user 29 Sep): model cadangan DIHAPUS TOTAL.
+    # jev error sesaat (timeout/429/5xx) = kandidat ini dilewati, kandidat BERIKUTNYA dinilai normal;
+    # state scan/sistem gak terpengaruh — diulang alami di iterasi berikutnya.
+    # 402 = notif topup (anti-spam 1x/jam). GAK ADA model kedua, GAK ADA istirahat panjang.
+    import jev_bridge
+    try:
+        r=jev_bridge.call_jev(brief)
+        if r.get('decision') in ('CONFIRMED','REJECT'):
+            return r
+        raise RuntimeError('jev bad response')
+    except Exception as e:
+        _is402=jev402_hit(e)
+        log({'event':('jev_402' if _is402 else 'jev_err'),'msg':str(e)[:100]})
+        if _is402: _notify_bos_down('402', str(e))
+        return {"decision":"REJECT","confidence":0,"reason":f"jev_err:{str(e)[:60]}"}
 
 def jev402_hit(e):
     """True kalau exception = HTTP 402 Payment Required (quota habis -> ganti provider)."""
@@ -220,11 +171,8 @@ def jev402_hit(e):
     return '402' in s or 'Payment Required' in s
 
 def _notify_bos_down(kind, detail=''):
-    """P32: notif TG data-real (bukan 'BOT START'). Max 1x/jam per kind — anti spam.
-    kind='402'      -> jev/downstream 402, fallback jalan (bot TIDAK diem).
-    kind='402_all'  -> SEMUA provider 402 -> bot diem total (spec user).
-    P33 ANTI-SPAM FIX: flag disimpan di file TERPISAH (dewa_notify_flag.json) —
-    dulu pakai dewa_live_state.json yang di-overwrite st-memori loop -> spam 315x/24h."""
+    """P35: notif TG 402 — FULL JEV, tanpa fallback. Max 1x/jam (P33 anti-spam,
+    flag file terpisah dewa_notify_flag.json)."""
     try:
         flagf=os.path.join(os.path.dirname(os.path.abspath(__file__)),'dewa_notify_flag.json')
         now=time.time()
@@ -234,23 +182,17 @@ def _notify_bos_down(kind, detail=''):
         if now-flags.get(key,0) < 3600: return
         flags[key]=now
         json.dump(flags, open(flagf,'w'))
-        bot_provider=BOS_PROVIDER or 'jev'
-        fb=os.environ.get('BOS_FALLBACKS','lightvela')
-        if kind=='402_all':
-            head=f"🔴 SEMUA BOS LLM 402 — TOPUP DIBUTUHKAN"
-            status="➡️ Status    : TIDAK ADA model yang bisa mikir — bot idle menunggu topup"
-        else:
-            head=f"⚠️ BOS {bot_provider.upper()} 402 — BUTUH TOPUP"
-            status=f"➡️ Fallback  : {fb} — bot TETAP jalan, scan tetap hidup"
+        bot_provider='jev'
+        head=f"⚠️ BOS JEV 402 — BUTUH TOPUP"
         tg.send(
             f"{head}\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"⏰ {datetime.now(timezone.utc).strftime('%d %b %H:%M UTC')}\n"
-            f"🤖 Bos utama : {bot_provider} (HTTP 402 Payment Required)\n"
-            f"🔗 Detail    : {detail[:90]}\n"
-            f"{status}\n"
-            f"🔁 Retry 429 : otomatis 3 detik (aktif)\n"
-            f"🛡️ Loop      : TIDAK istirahat 10 menit, TIDAK restart")
+            f"🤖 Bos      : jev (HTTP 402 Payment Required)\n"
+            f"🔗 Detail   : {detail[:90]}\n"
+            f"➡️ Status   : FULL JEV — keputusan DITUNDA sampai topup (jev satu-satunya bos)\n"
+            f"🔁 Retry 429: otomatis 3 detik (aktif)\n"
+            f"🛡️ Loop     : scan tetap hidup, kandidat diulang iterasi berikutnya")
     except Exception as e:
         log({'event':'notify_bos_down_err','msg':str(e)[:80]})
 

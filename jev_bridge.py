@@ -5,7 +5,7 @@ P32 (28 Sep 2026): MULTI-QUESTION 1 request (1 choice + 8 score + 2 noul) + WICK
 Skema: POST {base} {model, state, questions:{name:{type:'choice'|'score'|'noul', instructions, criteria}}}
   choice -> {choice, probabilities, confidence}; score -> nilai 0-4; noul -> teks.
 Resiliensi (koreksi user 28 Sep): 429 = retry 3 detik (max 2); 402 = raise Jev402
--> pemanggil (dewa_live.llm_call) fallback ke model berikutnya di .env TANPA istirahat.
+-> FULL JEV NO-FALLBACK (P35): error sesaat = kandidat dilewati, diulang iterasi berikutnya.
 """
 import json, os, urllib.request, urllib.error, time
 
