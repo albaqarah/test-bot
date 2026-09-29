@@ -1,15 +1,31 @@
 #!/usr/bin/env python3
 """Unit test P32/P35 offline: jev402_hit, notif anti-spam (file flag terpisah), llm_call jev-only.
-P35: fallback chain DIHAPUS — jev error = REJECT jev_err (tanpa model kedua)."""
-import os, sys, json, tempfile, importlib
+P35: fallback chain DIHAPUS — jev error = REJECT jev_err (tanpa model kedua).
+P36 hygiene: TIDAK menyentuh file produksi. Log jsonl di-redirect, flag notif di-backup/restore,
+state.json pake kopi temp — sebelumnya test ini nulis jev_err junk ke log prod & sempat
+nyalain flag notif 402 beneran (ketahuan di audit 29 Sep 18:26)."""
+import os, sys, json, tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import dewa_live as dl  # P36: import DULU (.env OVERRIDE penuh), baru timpa env utk test
-# P35b: .env SELALU menang atas setdefault -> dulu test ini malah nembak API beneran.
-# jev_bridge baca env saat di-import (lazy di llm_call), jadi timpa SETELAH import = aman.
+# P35b: .env SELALU menang -> timpa SETELAH import (jev_bridge baca env saat import, lazy di llm_call).
 os.environ['JEV_BASE_URL']='http://127.0.0.1:1'  # port mati -> koneksi gagal
 os.environ['JEV_TIMEOUT']='2'
 os.environ['JEV_API_KEY']='test-dummy-key'
+
+# --- P36 hygiene: redirect/rescue semua path produksi ---
+_HERE=os.path.dirname(os.path.abspath(__file__))
+dl.LOG=os.path.join(tempfile.gettempdir(),'test_p32_dl.jsonl')
+try: os.remove(dl.LOG)
+except Exception: pass
+_FLAGF=os.path.join(_HERE,'dewa_notify_flag.json')
+try: _flag_orig=open(_FLAGF).read()
+except Exception: _flag_orig=None
+_STF=os.path.join(_HERE,'dewa_live_state.json')
+try: _st=json.load(open(_STF))
+except Exception: _st={}
+_sttmp=os.path.join(tempfile.gettempdir(),'test_p32_state.json')
+json.dump(_st, open(_sttmp,'w'))
 
 # 1) jev402_hit
 class E402(Exception): pass
@@ -27,7 +43,7 @@ ok_jo = r.get('decision')=='REJECT' and str(r.get('reason','')).startswith('jev_
 print('llm_call jev-only (error -> REJECT jev_err):', ok_jo, r)
 
 # 3) anti-spam notif: 2x call dalam <1 jam -> cuma 1 notif (flag file terpisah P33)
-flagf=os.path.join(os.path.dirname(os.path.abspath(__file__)),'dewa_notify_flag.json')
+flagf=_FLAGF
 try: os.remove(flagf)
 except Exception: pass
 sent=[]
@@ -39,15 +55,13 @@ dl._notify_bos_down('402','tes unit')
 dl._notify_bos_down('402','tes unit ke-2 (harus diblok)')
 ok_spam = len(sent)==1
 # tahan overwrite: tiru save_state menimpa STATE dgn flag lama (bug asli P33) -> flag FILE tetap awet
-stf=os.path.join(os.path.dirname(os.path.abspath(__file__)),'dewa_live_state.json')
+stf=_sttmp
 try: st=json.load(open(stf))
 except Exception: st={}
 st['bos_down_402']=0
 json.dump(st, open(stf,'w'))
 dl._notify_bos_down('402','tes ke-3 setelah state dioverwrite loop (harus tetap diblok)')
 ok_spam = ok_spam and len(sent)==1
-# bersihin artefak test
-st.pop('bos_down_402',None); json.dump(st, open(stf,'w'))
 print('notif anti-spam 1x/jam + tahan overwrite:', ok_spam)
 
 # 4) jev_bridge: rubric criteria = 5 item (P34)
@@ -55,5 +69,14 @@ import jev_bridge as jb2
 qs=jb2.build_questions({"symbol":"T","side":"LONG","grade":"A","source":"trend"})
 ok_crit=all(len(q.get('criteria',[]))==5 for k,q in qs.items() if q.get('type')=='score')
 print('rubric criteria 5 item 0-4:', ok_crit)
+
+# P36 hygiene: balikin flag notif ke kondisi semula (jangan tinggalin timestamp test)
+try:
+    if _flag_orig is None:
+        try: os.remove(_FLAGF)
+        except Exception: pass
+    else:
+        open(_FLAGF,'w').write(_flag_orig)
+except Exception: pass
 
 print('SEMUA:', all([ok402, ok_jo, ok_spam, ok_crit]))
