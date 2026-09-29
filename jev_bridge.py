@@ -80,23 +80,57 @@ DISIPLIN URUTAN: proses P1 sampai P10 SELALU berurutan — dilarang melompati la
 atau memilih sebelum semua langkah lewat."""
 
 # P32 RUBRIC: 8 dimensi 0-4. timing_freshness & liquidity_risk bobot x2.
+# P34 FIX (29 Sep): criteria score HARUS 5 item (0,1,2,3,4) — dulu 3 item bikin jev cuma bisa jawab
+# 0-2 (array = pilihan terbatas), setup sempurna ke-gas di gate 50. Tervalidasi live: 3.95/1.62/0.74.
 RUBRIC=[
  ("rs_quality",  "KUALITAS SETUP", "Kualitas setup keseluruhan setelah pipeline 1-10",
-   {"0":"Sinyal sampah/melawan hampir semua lapisan","2":"Setup medioker, bukti campur","4":"Setup teks: makro+MSS+volume+lokasi selaras penuh"}),
+  ["0 = Sinyal sampah: melawan hampir semua lapisan",
+   "1 = Lemah: 1-2 bukti pendukung saja",
+   "2 = Medioker: bukti campur, tidak yakin",
+   "3 = Bagus: mayoritas lapisan searah",
+   "4 = Sempurna: makro+MSS+volume+lokasi selaras penuh"]),
  ("rs_timing",   "TIMING & FRESHNESS (bobot 2x)", "Segar tidaknya entry sekarang (pucuk/lembah)",
-   {"0":"Telat/kejar harga terbang (vwap_z ekstrem lawan)","2":"Netral, harga di tengah jalan","4":"Lemparan awal di pucuk/lembah: wickHint searah strength tinggi ATAU vwap_z diskon/premium + climax"}),
+  ["0 = Telat: kejar harga terbang (vwap_z ekstrem lawan)",
+   "1 = Ketinggalan: gerakan utama lewat, risiko retrace dalam",
+   "2 = Netral: harga di tengah jalan",
+   "3 = Cepat: baru mulai berbalik, masih bisa nyusul",
+   "4 = Lemparan awal di pucuk/lembah: wickHint searah strength tinggi ATAU vwap_z diskon/premium + climax"]),
  ("rs_liquidity","LIKUIDITAS & RISIKO WICK (bobot 2x)", "Risiko kena wick/likuidasi dini",
-   {"0":"SL pasti kena wick: deket wall lawan / ATR ganas / SL di dlm range","2":"Wick biasa, SL standar aman","4":"SL di balik struktur+wall searah, ATR tenang, book_imb searah"}),
+  ["0 = SL pasti kena wick: deket wall lawan / ATR ganas / SL di dlm range",
+   "1 = Wick kejam: jarak SL sempit dibanding noise",
+   "2 = Wick biasa: SL standar aman",
+   "3 = Aman: SL ada ruang, ATR moderat",
+   "4 = Sangat aman: SL di balik struktur+wall searah, ATR tenang, book_imb searah"]),
  ("rs_trend",    "TREND ALIGNMENT MTF", "Keselarasan 5m/15m/1h + money-flow",
-   {"0":"Melawan money-flow DAN mtf.score 0-1/3","2":"2/3 atau lawan satu lapisan saja","4":"mtf 3/3 + money-flow searah"}),
+  ["0 = Melawan money-flow DAN mtf.score 0-1/3",
+   "1 = Lawan mayoritas TF",
+   "2 = Campur: 2/3 ATAU lawan satu lapisan saja",
+   "3 = Mayoritas searah",
+   "4 = mtf 3/3 + money-flow searah"]),
  ("rs_rr",       "RR & LOKASI", "Kualitas risk-reward dari lokasi entry ini",
-   {"0":"RR efektif buruk: entry di lokasi jelek (tengah range/kejar)","2":"RR standar regime","4":"Entry tepat di zona (FVG/wick/EMA) dgn TP multi-R realistis"}),
+  ["0 = RR efektif buruk: entry di lokasi jelek (tengah range/kejar)",
+   "1 = Lokasi bawah standar",
+   "2 = RR standar regime",
+   "3 = RR bagus: dekat zona kunci",
+   "4 = Entry tepat di zona (FVG/wick/EMA) dgn TP multi-R realistis"]),
  ("rs_crowd",    "POSISI CROWD", "Seberapa crowded posisi lawan/serupa",
-   {"0":"Crowded ekstrem lawan arah: funding ekstrem + OI meledak lawan","2":"Netral (funding/OI tenang)","4":"Crowd kalah arah: funding/OI mendukung gerakan ini"}),
+  ["0 = Crowded ekstrem lawan arah: funding ekstrem + OI meledak lawan",
+   "1 = Crowd condong lawan",
+   "2 = Netral (funding/OI tenang)",
+   "3 = Crowd mulai kalah arah",
+   "4 = Crowd kalah arah: funding/OI mendukung gerakan ini"]),
  ("rs_vol",      "VOLATILITY FIT", "Cocok tidaknya volatilitas dgn gaya scalp 5m",
-   {"0":"Volatilitas mati (dry_up/ADX<15) ATAU ganas gila (ATR>2.5%)","2":"Vol normal","4":"Squeeze_on baru pecah ATAU vol sehat searah"}),
+  ["0 = Volatilitas mati (dry_up/ADX<15) ATAU ganas gila (ATR>2.5%)",
+   "1 = Vol tidak cocok utk scalp",
+   "2 = Vol normal",
+   "3 = Vol sehat searah",
+   "4 = Squeeze_on baru pecah ATAU vol sehat searah penuh"]),
  ("rs_session",  "SESSION FIT", "Kualitas sesi WIB saat ini",
-   {"0":"OFFHOURS/weekend TradFi logam, volume kopong","2":"Sesi netral","4":"LONDON/NEWYORK utk crypto/logam dgn vol sehat"}),
+  ["0 = OFFHOURS/weekend TradFi logam, volume kopong",
+   "1 = Sisi sepi",
+   "2 = Sesi netral",
+   "3 = Sesi aktif",
+   "4 = LONDON/NEWYORK utk crypto/logam dgn vol sehat"]),
 ]
 
 def _framing(brief):
@@ -127,11 +161,13 @@ def build_questions(brief):
           "REJECT":"LAYAK DITOLAK: lawan money-flow tanpa MSS, momentum kering, telat, atau total CONFIRMED < 0.55. Kalau arah benar tapi harga belum retrace ke FVG, pakai REJECT — kurir bakal nanya lagi saat retrace"
         }}}
     for name,label,inst,crit in RUBRIC:
-        # Schema server (dibedah 28 Sep): criteria utk type 'score' = ARRAY (bukan object spt 'choice').
-        q[name]={"type":"score","instructions":f"{label} — {inst}. Skala 0-4.",
-                 "criteria":[f"skor {k}: {v}" for k,v in crit.items()]}
-    q["noul_invalidate"]={"type":"noul","instructions":"SATU kalimat: apa yg membuat trade ini GUGUR (invalidasi)?"}
-    q["noul_flip"]={"type":"noul","instructions":"SATU kalimat: sinyal apa yg akan MEMBALIK bias kamu?"}
+        # P34: criteria = 5 item eksplisit (0-4). Array = pilihan terbatas: index item = nilai score.
+        q[name]={"type":"score","instructions":f"{label} — {inst}. Pilih SATU angka 0-4 dari kriteria.",
+                 "criteria":crit}
+    # P34: noul = numerik 0-1 (tanpa teks — jev gak bisa generate kalimat). Dijadikan skor risiko:
+    # tinggi = banyak cara trade ini gugur / bias gampang kebalik -> dipakai sbg veto lembut di rubric_total.
+    q["noul_invalidate"]={"type":"noul","instructions":"Seberapa besar RISIKO trade ini GUGUR (invalidasi)? 0=tidak ada, 1=hampir pasti gugur."}
+    q["noul_flip"]={"type":"noul","instructions":"Seberapa mudah bias ini KEBALIK oleh sinyal baru? 0=sangat stabil, 1=sangat rapuh."}
     return q
 
 def rubric_total(answers):
@@ -140,7 +176,7 @@ def rubric_total(answers):
     for name,label,inst,crit in RUBRIC:
         a=answers.get(name) or {}
         val=None
-        for k in ('value','score','choice','confidence'):
+        for k in ('score','value','choice','confidence'):
             if isinstance(a.get(k),(int,float)): val=float(a[k]); break
             if isinstance(a.get(k),str):
                 try: val=float(a[k]); break
@@ -151,7 +187,15 @@ def rubric_total(answers):
         tot+=val*w; maxw+=4.0*w
         detail[name]=round(val,1)
     if maxw<=0: return None,{}
-    return round(tot/maxw*100), detail
+    total=round(tot/maxw*100)
+    # P34 NOUL VETO (koreksi user: noul numerik): rata2 noul >= 0.75 = risiko gugur/flip ekstrem
+    # -> total dipotong 20 poin (bisa memicu KILL<50 padahal rubric bagus).
+    nv=[float(a.get('noul')) for a in (answers.get('noul_invalidate'),answers.get('noul_flip'))
+        if isinstance(a,dict) and isinstance(a.get('noul'),(int,float))]
+    if nv:
+        detail['noul_risk']=round(sum(nv)/len(nv),2)
+        if sum(nv)/len(nv)>=0.75: total=max(0,total-20)
+    return total, detail
 
 def call_jev(brief, symbol=''):
     """brief = dict briefing (dari dewa_skill.build_briefing + market_snapshot.enrich_market).
