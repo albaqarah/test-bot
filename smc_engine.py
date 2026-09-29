@@ -107,39 +107,63 @@ def detect_liquidity(kk):
         return {'liquidityPool': None}
 
 # ---------- BTC Dominance proxy ----------
+_dom_cache={'t':0.0,'v':None}
+_TOP=['BTCUSDT','ETHUSDT','SOLUSDT','XRPUSDT','DOGEUSDT','BNBUSDT','ADAUSDT','LINKUSDT',
+      'LTCUSDT','DOTUSDT','AVAXUSDT','SUIUSDT']
+def _dom_from_rows(rows):
+    """Matematika BTC.D dari rows ticker (full atau satuan)."""
+    rows=[x for x in rows if x['symbol'].endswith('USDT')]
+    rows.sort(key=lambda x: -float(x['quoteVolume']))
+    top=rows[:20]
+    if len(top)<6 or not any(x['symbol']=='BTCUSDT' for x in top): return None
+    btc=sum(float(x['quoteVolume']) for x in top if x['symbol']=='BTCUSDT')
+    tot=sum(float(x['quoteVolume']) for x in top)
+    share_now=btc/tot if tot else None
+    btc_chg=float([x for x in top if x['symbol']=='BTCUSDT'][0]['priceChangePercent'])
+    alt_chg=statistics.mean(float(x['priceChangePercent']) for x in top if x['symbol']!='BTCUSDT')
+    if btc_chg-alt_chg>0.5: trend='RISING'
+    elif alt_chg-btc_chg>0.5: trend='FALLING'
+    else: trend='SIDEWAYS'
+    return {'btcDominance':trend,'btcChg24h':btc_chg,'altChg24hAvg':round(alt_chg,2),
+            'btcVolShareTop20':round(share_now*100,1) if share_now else None}
+
 def btc_dom_trend():
-    """Proxy BTC.D: share volume BTC (quote vol) vs total top-20 pair 1h.
-    Share naik 2 periode = RISING. Bukan BTC.D resmi (off-chain CMC), tapi
-    arah aliran uang intra-Binance — yang relevan untuk rotasi alt."""
+    """Proxy BTC.D: share volume BTC (quote vol) vs top-20 pair. 
+    P36: (1) cache 60 dtk — dulu fetch penuh PER KANDIDAT tanpa cache;
+    (2) fallback ticker satuan (weight 1/ea) — ticker/24hr penuh weight ~40 gampang
+    kena 429/418 pas IP sibuk scan 41 pair (bos jadi buta '?' — kasus 16:32);
+    (3) gagal total = 10 dtk lagi coba lagi, selagi balikin nilai cache terakhir."""
+    import time as _t
+    now=_t.time()
+    if now-_dom_cache['t']<60: return _dom_cache['v']
     try:
-        t = _fapi('ticker/24hr')
-        if not t:
-            return None
-        rows = [x for x in t if x['symbol'].endswith('USDT')]
-        rows.sort(key=lambda x: -float(x['quoteVolume']))
-        top = rows[:20]
-        btc = sum(float(x['quoteVolume']) for x in top if x['symbol'] == 'BTCUSDT')
-        tot = sum(float(x['quoteVolume']) for x in top)
-        share_now = btc / tot if tot else None
-        # share historical approx: pakai rasio priceChangePct — BTC outperform = dominance rising
-        btc_chg = float([x for x in top if x['symbol'] == 'BTCUSDT'][0]['priceChangePercent'])
-        alt_chg = statistics.mean(float(x['priceChangePercent']) for x in top if x['symbol'] != 'BTCUSDT')
-        if btc_chg - alt_chg > 0.5:
-            trend = 'RISING'
-        elif alt_chg - btc_chg > 0.5:
-            trend = 'FALLING'
-        else:
-            trend = 'SIDEWAYS'
-        return {'btcDominance': trend, 'btcChg24h': btc_chg, 'altChg24hAvg': round(alt_chg, 2),
-                'btcVolShareTop20': round(share_now * 100, 1) if share_now else None}
+        t=_fapi('ticker/24hr')
+        if t:
+            v=_dom_from_rows(t)
+            if v:
+                _dom_cache['v']=v; _dom_cache['t']=now
+                return v
+        # fallback ringan: 12 ticker satuan (total weight 12 vs 40)
+        rows=[]
+        for s in _TOP:
+            d=_fapi(f'ticker/24hr?symbol={s}')
+            if d: rows.append(d)
+        v=_dom_from_rows(rows)
+        if v:
+            _dom_cache['v']=v; _dom_cache['t']=now
+            return v
     except Exception:
-        return None
+        pass  # malformed row / jaringan = jangan bunuh enrich (dulu 1 exception = SMC hilang total)
+    _dom_cache['t']=now-50  # gagal: coba lagi dlm 10 dtk
+    return _dom_cache['v']
 
 def money_flow(btc_bias, dom):
-    """Matriks aliran uang (persona v3.5). btc_bias: BULLISH/BEARISH/SIDEWAYS."""
-    if not dom or not btc_bias:
+    """Matriks aliran uang (persona v3.5). btc_bias: BULLISH/BEARISH/SIDEWAYS.
+    P36: BTC.D gagal fetch = anggap SIDEWAYS (jangan buang bias bos cuma krn 1 endpoint
+    down — dulu dom None = matrix ikut kosong total)."""
+    if not btc_bias:
         return None
-    d = dom.get('btcDominance')
+    d = (dom or {}).get('btcDominance') or 'SIDEWAYS'
     table = {
         ('BULLISH', 'RISING'):  'FOKUS BTC LONG — uang tersedot ke BTC, alt cenderung diam/turun',
         ('BULLISH', 'FALLING'): 'FOKUS LONG ALTCOINS — altseason mini, momentum terbaik',
@@ -200,7 +224,14 @@ def enrich(sym, btc_bias=None):
     else:
         dom = btc_dom_trend()
         out.update(dom or {})
-        out.update(money_flow(btc_bias, dom) or {})
+        # P36 FIX: kurir ngirim arah harga (UP/DOWN/MIXED/'?') tapi tabel money_flow
+        # butuh BULLISH/BEARISH -> selalu None, persona langkah 2 (MONEY-FLOW MATRIX)
+        # mati senyap sejak P20 (2.524 audit: mf kosong 100%). Normalisasi di sini.
+        # CATATAN: param = btc_bias (jangan 'bias' — sempat NameError senyap, semua SMC mati!)
+        _b = btc_bias.get('bias') if isinstance(btc_bias, dict) else btc_bias
+        _m = {'UP':'BULLISH','DOWN':'BEARISH'}
+        _bn = _m.get(_b if isinstance(_b,str) else '', 'SIDEWAYS')
+        out.update(money_flow(_bn, dom) or {})
         out['assetClass'] = 'CRYPTO'
     return out
 

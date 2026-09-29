@@ -3,7 +3,10 @@
 dewa_skill.py — MODUL KURIR: susun briefing/ekstra utk bos jev (decisions API).
 Algoritma matematika = kurir: cuma setor kandidat grade A/B + data lengkap.
 Bos = jev (persona & pertanyaan ada di jev_bridge). P35: tanpa fallback LLM.
+P36: `import os` balik (P35 sempat kehapus bareng SYSTEM_PROMPT -> btc_bias mati
+senyap return '?' karena os.path tax di lazy-loader).
 """
+import os
 
 # P35: dewa_skill = MODUL KURIR SAJA.
 # SYSTEM_PROMPT fallback (bos LLM chat) DIHAPUS — FULL JEV NO-FALLBACK:
@@ -157,7 +160,10 @@ def classify_momentum(kk, sr=None, obv=None, volx=None, z=0.0, regime=''):
 
 def enrich_briefing(brief, kk, rs=None):
     """P13: suntik vision pack ke briefing bos - chart RSI6, momentum class, bar detail.
-    Return dict briefing BARU (jangan mutasi asli)."""
+    Return dict briefing BARU (jangan mutasi asli).
+    P36 FIX: dulu hasil classify_momentum/rsi6_series DIHITUNG lalu DIBUANG (return b
+    kosong) -> vision.momentum_class mati senyap sejak P13, P13-gate 'kering' & wick-flip
+    P16-B buta. Sekarang beneran disuntik."""
     import copy
     b=copy.deepcopy(brief)
     c=[r[4] for r in kk]
@@ -171,4 +177,8 @@ def enrich_briefing(brief, kk, rs=None):
         cls,r6v = classify_momentum(kk, volx=volx, z=z, regime=b.get('regime',''))
     except Exception:
         cls,r6v = 'mean_reversion', r6
+    b.setdefault('vision',{})
+    b['vision']['momentum_class']=cls
+    if isinstance(r6v,(int,float)): b['vision']['rsi6']=round(float(r6v),1)
+    if r6sp: b['vision']['rsi6_spark']=r6sp
     return b

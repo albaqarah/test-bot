@@ -577,10 +577,14 @@ def _iterate_inner(once=False):
             try:
                 _ss=((cd.get('brief') or {}).get('slSuggest') or {})
                 _sug=float(_ss.get('sl_pct_suggest') or 0)
-                if _sug>sl_pct and variant!='TIGHT':
-                    sl_pct=_sug  # ATR lebih lebar dari pilihan bos -> ikut ATR (anti SL ketat di pasar wick)
+                # P36 UNIT-FIX (bug WLD 29 Sep): sl_pct_suggest = PERSEN (0.8-2.4, dst dr
+                # market_snapshot), sl_pct internal = FRAKSI (0.012 = 1.2%). Dulu _sug
+                # langsung dipakai sbg fraksi -> 2.08 terbaca 208% -> SL -0.5586 / TP 4.82 absurs.
+                _sug_f=_sug/100.0
+                if _sug_f>sl_pct and variant!='TIGHT':
+                    sl_pct=_sug_f  # ATR lebih lebar dari pilihan bos -> ikut ATR (anti SL ketat di pasar wick)
                 tp_rr=max(tp_rr, 2.5)  # RR minimum dijaga
-                if _sug and abs(sl_pct-_sug)<1e-9 and variant in ('','NORMAL'):
+                if _sug_f and abs(sl_pct-_sug_f)<1e-9 and variant in ('','NORMAL'):
                     log({'event':'atr_sl','symbol':cd['sym'],'atr_suggest':_sug,
                          'msg':'SL mengikuti ATR14x1.5 (P32)'})
             except Exception: pass
@@ -612,6 +616,11 @@ def _iterate_inner(once=False):
         except Exception:
             pass  # guard best-effort; kag gagal = perilaku lama
         # NORMAL / tanpa varian = angka engine (SL_PCT & RR regime) — fallback selalu ada
+        # P36 SANITY GUARD: SL wajar 0.3%-3.0% dari harga entry — mematikan SELURUH kelas
+        # bug satuan (persen vs fraksi) dari sumber mana pun. SL negatif/absurd = posisi
+        # jalan TANPA tameng (kasus WLD 29 Sep: SL -208%). Clamp ini hanya menyentuh nilai
+        # patologis: semua jalur normal (TIGHT 0.8 / NORMAL 1.2 / WIDE 1.8 / ATR max 2.4) lolos utuh.
+        sl_pct=max(0.003,min(0.030,sl_pct))
         sl_d=entry*sl_pct; tp_d=sl_d*tp_rr  # SL % dari harga (proporsional semua coin)
         sl=entry-sl_d if side=='LONG' else entry+sl_d
         tp=entry+tp_d if side=='LONG' else entry-tp_d
