@@ -11,6 +11,20 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 ---
 
 
+## CHANGELOG v6.6 (30 Sep) - P36-P38 EYES ON + FADE LENS + ENTRY LOC + ARGMAX→TOTAL
+- P36: fix bug satuan SL (slSuggest % dibaca fraksi → SL -208% WLD) — konversi /100 + SANITY GUARD SL 0.3-3.0%;
+  3 mata bos yang mati senyap dinyalakan (btc_bias, money-flow UP→BULLISH, momentum_class ke briefing)
+- P37: aknosa knowledge-graph (AST semua module: import/attr-call/spec-load edges, dead-code & duplikat scan) — 0 dead code
+- P38a: skip_dry recalibrasi — kandidat 'kering' bermutu (wickHint dir LONG/SHORT + strength ≥55) LOLOS ke bos
+  (reversal terbaik lahir saat volume kering; kasus NEAR 01:35 WIB: hint str 64 dibunuh gate ini 100%)
+- P38b: LENSA FADE di framing bos — fade = kontra-trend by design; rs_trend tidak lagi menghukum fade;
+  nilai lokasi ekstrem + sisa ruang + tanda kehabisan tenaga
+- P38c: entryLoc — kurir hitung lokasi entry vs swing 30-bar (AT-TURN ≤1.5 ATR / MID / CHASE >3 ATR),
+  masuk briefing bos + baris notif 🎯/⚠️ (studi 182 trade: AT-TURN WR 76.5% satu-satunya bucket plus)
+- P38d: verdict argmax→TOTAL — Σp(CONFIRMED_*) > p(REJECT) dan ≥0.50 = CONFIRMED (obat split-vote varian
+  TIGHT/NORMAL/WIDE, kasus TRX 0.60 vs 0.37); MIN_CONF & rubric fence tetap jalan sebagai lapisan ke-2
+- Test: test_p38.py 39/39 (replay NEAR + TRX), test_p36 20/20, test_p32 offline True
+
 ## CHANGELOG v6.5 (26 Sep) - P20-P23 TYPESAFE SNIPER v3.5 + TRADFI FORCE-FLAT + EKUITAS REAL
 - P20: persona TYPESAFE SNIPER v3.5 (money-flow matrix BTC.D/DXY, MSS, FVG, liquidity) + smc_engine.py baru;
   briefing bos kaya data SMC; baris notif 🛰️ MONEY-FLOW · MSS · FVG; Qty di notif entry

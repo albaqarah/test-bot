@@ -207,6 +207,28 @@ def divergence_rsi6(kk, rs, i=None, look=40):
     if len(pl)>=2 and pl[-1][0]<pl[-2][0] and pl[-1][1]>pl[-2][1]: out['bull_div']=True
     return out
 
+def entry_loc(kk, i=None, side=None, atr=None):
+    """P38-C (ACC user 30 Sep): LOKASI entry vs swing 30-bar dlm satuan ATR.
+    true = harga masuk di zona swing (<=1.5 ATR dr pucuk utk SHORT / lembah utk LONG) = premium timing;
+    chase = sudah lari >3 ATR dr swing = ngejar gerakan;
+    mid = di antaranya. Ukur jarak entry ke swing EXTREME searah (SHORT->swing high, LONG->swing low)
+    dan umur swing (bar sejak swing terbentuk). Semua dari kk host-side (gratis)."""
+    if i is None: i=len(kk)-2
+    if i<32 or side not in ('LONG','SHORT'): return None
+    seg=kk[i-30:i]
+    if not seg: return None
+    hi_j=max(range(len(seg)), key=lambda j: float(seg[j][2])); lo_j=min(range(len(seg)), key=lambda j: float(seg[j][3]))
+    hi=float(seg[hi_j][2]); lo=float(seg[lo_j][3]); c=float(kk[i][4])
+    if atr is None: atr=atr14(kk,i)
+    if not atr or atr<=0: return None
+    if side=='SHORT':
+        dist=(hi-c)/atr; age=i-1-(i-30+hi_j)
+    else:
+        dist=(c-lo)/atr; age=i-1-(i-30+lo_j)
+    loc='true' if dist<=1.5 else ('mid' if dist<=3.0 else 'chase')
+    return {'loc':loc,'swing_dist_atr':round(dist,2),'swing_age_bars':age,
+            'swing_px':round(hi if side=='SHORT' else lo,8)}
+
 def session_wib():
     from datetime import datetime, timezone, timedelta
     h=datetime.now(timezone(timedelta(hours=7))).hour
@@ -313,6 +335,8 @@ def enrich_market(brief, sym, kk, rs=None, i=None):
         except Exception: pass
         brief['market']=m
         try: brief['wickHint']=wick_hunter(kk,rs,i)
+        except Exception: pass
+        try: brief['entryLoc']=entry_loc(kk,i,side,a)
         except Exception: pass
     except Exception:
         pass

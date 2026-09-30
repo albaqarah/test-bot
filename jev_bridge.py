@@ -142,8 +142,16 @@ def _framing(brief):
     base=f"Sinyal {side} dari kurir (source={src}), momentum_class={mcl}, rsi6_realtime={r6}. "
     _mf=brief.get('moneyFlow') or brief.get('tradfiMoneyFlow') or ''
     if _mf: base+=f" MONEY-FLOW AKTIF: {_mf}. "
+    _el=brief.get('entryLoc') or {}
+    if isinstance(_el,dict) and _el.get('loc'):
+        base+=f" LOKASI ENTRY: {_el.get('loc')} ({_el.get('swing_dist_atr')} ATR dari swing, swing {_el.get('swing_age_bars')} bar lalu). "
     if src=='fade':
-        return base+"FADE: ini taruhan BERBALIK arah. Wajib ada bukti berbalik: wick rejection di ekstrem, volume mengering, stoch_rsi belok. Jatuh/naik tajam TANPA tanda balik akan LANJUT — itu REJECT, bukan diskon."
+        return base+("FADE: ini taruhan BERBALIK arah. Wajib ada bukti berbalik: wick rejection di ekstrem, "
+            "volume mengering, stoch_rsi belok. Jatuh/naik tajam TANPA tanda balik akan LANJUT — itu REJECT, bukan diskon. "
+            "P38-B LENSA FADE: fade itu KONTRA-TREND BY DESIGN — jangan hukum rs_trend rendah; nilai pakai LENSA "
+            "REVERSAL: (1) lokasi: harga di pucuk/lembah (vwap_z premium/diskon, dekat ekstrem range); "
+            "(2) sisa-ruang searah fade masih ada; (3) tanda kehabisan tenaga: wick rejection, divergence RSI6, climax closing. "
+            "Lokasi ekstrem + tanda balik = boleh CONFIRMED walau mtf hanya 1/3; nol tanda balik di harga tengah jalan = REJECT.")
     if src=='trend':
         return base+"TREND-PULLBACK: taruhan tren LANJUT setelah koreksi kecil. Sah kalau pullback dangkal (ema25 tahan), volume turun saat pullback & naik lagi searah tren. Pullback dalam + volume lawan = tren patah → REJECT."
     if src=='p6':
@@ -227,7 +235,23 @@ def call_jev(brief, symbol=''):
         variant=choice.split('_',1)[1] if '_' in choice else 'NORMAL'
         out["decision"]="CONFIRMED"; out["variant"]=variant
     elif choice=='REJECT':
-        out["decision"]="REJECT"
+        # P38-D (ACC user 30 Sep): argmax -> TOTAL CONFIRMED. Pilihan CONFIRMED pecah 3 varian
+        # (TIGHT/NORMAL/WIDE) bikin vote bos ter-split: total keyakinan CONFIRMED bisa ngalahin
+        # p(REJECT) tapi kalah argmax (kasus TRX 29 Sep: WIDE 0.31 + NORMAL 0.29 = 0.60 vs
+        # REJECT 0.37 tapi tetap REJECT karena split). Kalau total CONFIRMED > p(REJECT) DAN
+        # >= 0.50 -> CONFIRMED (varian dgn p tertinggi). MIN_CONF gate & rubric fence tetap
+        # dievaluasi SETELAH titik ini (lapisan ke-2), jadi ini bukan pintu dangkal.
+        try: _pconf=sum(float(v) for k,v in probs.items() if str(k).upper().startswith('CONFIRMED'))
+        except Exception: _pconf=0.0
+        try: _prej=float(probs.get('REJECT') or 0)
+        except Exception: _prej=0.0
+        if _pconf>_prej and _pconf>=0.50:
+            _top=max(((k,v) for k,v in probs.items() if str(k).upper().startswith('CONFIRMED')), key=lambda x:x[1])
+            variant=_top[0].split('_',1)[1] if '_' in _top[0] else 'NORMAL'
+            out["decision"]="CONFIRMED"; out["variant"]=variant
+            out["reason"]+=f" [P38-D argmax→total: ΣCONFIRMED {_pconf:.2f} > REJECT {_prej:.2f}]"
+        else:
+            out["decision"]="REJECT"
     else:
         out["decision"]="REJECT"; out["reason"]=f"jev_unknown_choice:{choice[:30]}"
     if total is not None:

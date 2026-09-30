@@ -190,6 +190,12 @@ def fmt_open(e):
     mom=""
     if e.get('mclass') or e.get('rsi6') is not None:
         mom=NL+f"🧭 Momentum {e.get('mclass','?')} · RSI6 {e.get('rsi6','?')}"
+    # P38-C: baris lokasi entry (AT-TURN/MID/CHASE) — transparansi timing ke user
+    _el=e.get('entryLoc') or {}
+    loc38=''
+    if isinstance(_el,dict) and _el.get('loc'):
+        _eart={'true':'🎯 AT-TURN','mid':'🧭 MID','chase':'⚠️ CHASE'}.get(_el['loc'],'📍 '+str(_el['loc']))
+        loc38=NL+f"{_eart} · {_el.get('swing_dist_atr','?')} ATR dari swing ({_el.get('swing_age_bars','?')} bar lalu)"
     smc=""
     if e.get('mf') or e.get('mss') or e.get('fvg'):
         parts=[]
@@ -222,7 +228,7 @@ def fmt_open(e):
         + NL + f"🧠 Bos conf: {conf}/100"
         + NL + _bos_line().replace('🤖 ','🤖 ')
         + NL + f"🧠  <i>{e.get('reason','')}</i>"
-        + mom + smc
+        + mom + loc38 + smc
         + NL + DIV
         + NL + f"🎟️ Slot {e.get('n_open','?')}/5 · {_equity(e.get('saldo',0)).replace('💰 Ekuitas   ','💰 Ekuitas ')}"
         + NL + f"📊 Hari ini {r['w']}W/{r['l']}L · WR {_wr(r):.1f}% · Net {r['net']:+.2f}"

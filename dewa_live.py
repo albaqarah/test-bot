@@ -346,6 +346,16 @@ def last_reason(sym, st):
     except Exception: pass
     return ''
 
+def _p38_dry_pass(vcls, wh):
+    """P38a koreksi skip_dry: True = tetap SKIP. Kandidat 'kering' DILEPAS kalau wick-hint
+    bermutu (dir LONG/SHORT, strength>=55 — wick_hunter gratis host-side) karena reversal
+    terbaik justru lahir saat volume kering (konteks ekstrem). Bos yang menilai, bukan kurir."""
+    try:
+        s=wh.get('strength'); s=int(s) if s is not None else -1
+    except Exception: s=-1
+    al=(wh.get('dir') in ('LONG','SHORT'))
+    return (vcls=='kering') and not (al and s>=55)
+
 def iterate(once=False):
     """Wrapper anti-race: cuma SATU proses boleh mutasi state (file-lock).
     Main loop = PRIORITAS: nunggu sampai 90 detik. Watchdog/cron = fallback: skip kalau sibuk."""
@@ -447,10 +457,16 @@ def _iterate_inner(once=False):
                                  'pattern':brief['wickHint'].get('pattern'),
                                  'strength':brief['wickHint'].get('strength')})
                     except Exception: pass
-                    # P13 KURIR GATE: momen 'kering' (tanpa aliran) dibuang SEBELUM bos — hemat API + anti sinyal sampah
+                    # P13 KURIR GATE (P38a RECALIBRASI): momen 'kering' masih difilter SEBELUM bos
+                    # (hemat API + anti sinyal kopong) TAPI kandidat dgn wick-hint bermutu (>=55,
+                    # wick_hunter gratis host-side) DILEPAS — reversal terbaik sering LAHIR pas volume
+                    # kering (konteks extreme), itu kerjaan BOS bukan kurir. Kasus NEAR 30 Sep 01:35 WIB:
+                    # hint SHORT str 64 dibunuh 100% oleh gate ini jam-jam pucuk, bos tak pernah ditanya.
                     vcls=str(brief.get('vision',{}).get('momentum_class',''))
-                    if vcls=='kering':
-                        log({'event':'skip_dry_momentum','symbol':sym,'side':side,'vol_x':score.get('vol_x')})
+                    _wh38=brief.get('wickHint') or {}
+                    if _p38_dry_pass(vcls, _wh38):
+                        log({'event':'skip_dry_momentum','symbol':sym,'side':side,'vol_x':score.get('vol_x'),
+                             'hint_str':_wh38.get('strength')})
                         continue
                     # P14 TRADFI GATE + P23 WINDOW: blok entry 3 jam sebelum break/close (anti volume kopong + irit API bos)
                     if sym in tfs.TRADFI:
@@ -646,7 +662,8 @@ def _iterate_inner(once=False):
                              'mf':(cd.get('brief') or {}).get('moneyFlow') or (cd.get('brief') or {}).get('tradfiMoneyFlow'),
                              'mss':(cd.get('brief') or {}).get('mss'),
 'battery':((cd.get('brief') or {}).get('momentumBattery') or {}).get('battery'),
-                             'fvg':(cd.get('brief') or {}).get('fvgStatus')})+'\n🟢 <b>MODE LIVE</b> — order beneran terkirim')
+                             'fvg':(cd.get('brief') or {}).get('fvgStatus'),
+                             'entryLoc':(cd.get('brief') or {}).get('entryLoc')})+'\n🟢 <b>MODE LIVE</b> — order beneran terkirim')
                 confirmed+=1
             except Exception as ex:
                 log({'event':'LIVE_ERR','symbol':cd['sym'],'msg':str(ex)[:120]})
@@ -658,7 +675,8 @@ def _iterate_inner(once=False):
         confirmed+=1
         reason=d.get('reason','') or d.get('key_factor','')
         log({'event':'open','symbol':cd['sym'],'side':side,'entry':entry,'sl':sl,'tp':tp,
-             'conf':d.get('confidence'),'grade':cd['grade'],'reason':reason})
+             'conf':d.get('confidence'),'grade':cd['grade'],'reason':reason,
+             'entryLoc':(cd.get('brief') or {}).get('entryLoc')})
         _v=(cd.get('brief') or {}).get('vision',{}) if isinstance(cd.get('brief'),dict) else {}
         tg.send(tg.fmt_open({'symbol':cd['sym'],'side':side,'grade':cd['grade'],
                              'entry':entry,'sl':sl,'tp':tp,'tp_rr':tp_rr,
@@ -671,6 +689,7 @@ def _iterate_inner(once=False):
                              'fvg':(cd.get('brief') or {}).get('fvgStatus'),
                              'regime':regime,'mclass':_v.get('momentum_class'),
                              'rsi6':_v.get('rsi6_now'),
+                             'entryLoc':(cd.get('brief') or {}).get('entryLoc'),
                              'n_open':len(st['open']),'saldo':st.get('saldo',0)}))
         # save PER EVENT: kalau proses kena kill saat LLM error bertubi, keputusan gak ilang & gak diulang
         save_state(st)
