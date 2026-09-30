@@ -188,7 +188,7 @@ def manage_open(st, k_cache):
                         continue
                     p['tradfi_eod_done']=True
                     exit_px=live_px(sym) or p['entry']
-                    qty=p.get('qty') or 20.0/p['entry']
+                    qty=p.get('qty') or (MARGIN*100*LEV)/p['entry']   # v7.1.1 #2: notional dinamis (dulu hardcode 20.0)
                     side=p['side']
                     pnl=(exit_px-p['entry'])*qty*(1 if side=='LONG' else -1)
                     pnl=round(pnl-0.02,2)  # fee taker
@@ -349,6 +349,7 @@ def _iterate_inner(once=False):
     # 2) kurir: cari kandidat baru di candle TERTUTUP terakhir
     n_open=len(st['open'])
     candidates=[]
+    pending_sides=set()  # v7.1.1 #1: dedup intra-batch (sym,side) — 1 pasangan 1 panggilan bos per batch
     done={(d[0],d[1],d[2]) for d in st.get('done',[])}  # dedup: load SEKALI sebelum loop pair
     for sym in PAIRS:
         try:
@@ -416,6 +417,11 @@ def _iterate_inner(once=False):
                         if _eb:
                             log({'event':'skip_tradfi_window','symbol':sym,'side':side,'window':_why})
                             continue
+                    # v7.1.1 #1: dedup intra-batch — sinyal dobel (sym,side) di batch sama
+                    # cuma diambil SEKALI (bar terbaru = loop urut), hemat kuota jev.
+                    _ps=(sym,side)
+                    if _ps in pending_sides: continue
+                    pending_sides.add(_ps)
                     candidates.append({'sym':sym,'i':i,'side':side,'grade':grade,'key':key,'src':src,
                                        'brief':brief,'entry_next':float(kk[i+1][1]) if i+1<len(kk) else None,
                                        'regime':reg})
@@ -590,7 +596,7 @@ def _iterate_inner(once=False):
         _br=cd.get('brief') or {}
         tg.send(tg.fmt_open({'symbol':cd['sym'],'side':side,'grade':cd['grade'],
                              'entry':entry,'sl':sl,'tp':tp,'tp_rr':tp_rr,
-                             'qty':round(20.0/entry,6),
+                             'qty':round((MARGIN*100*LEV)/entry,6),   # v7.1.1 #2: notional dinamis MARGIN*LEV (dulu hardcode 20.0)
                              'conf':d.get('confidence'),'reason':reason,
                              'variant':str(d.get('variant','')).upper(),
                              'mf':_br.get('moneyFlow') or _br.get('tradfiMoneyFlow'),

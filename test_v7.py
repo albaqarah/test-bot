@@ -167,6 +167,12 @@ check('dewa_live bersih kode mati', not dead, str(dead))
 # v7.1: wick-flip P16-B DIMUSNAHKAN — flip arah mekanis gak boleh balik lagi
 t_live=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'dewa_live.py')).read()
 check('v7.1 wick-flip musnah total', 'wick_flip' not in t_live and 'WICK-FLIP' not in t_live and "_flipped" not in t_live)
+# v7.1.1 CLEANUP: dedup intra-batch + notional dinamis + env OVERRIDE
+check('v7.1.1 dedup intra-batch pending_sides', 'pending_sides' in t_live and '20.0/' not in t_live)
+t_tg=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'tg_notify.py')).read()
+t_tg_code=re.sub(r'"""[\s\S]*?"""', ' ', t_tg)   # buang docstring sblm grep (lesson: kata kunci di docstring)
+t_tg_code=re.sub(r'#.*', '', t_tg_code)
+check('v7.1.1 tg_notify env OVERRIDE (P35, tanpa setdefault)', 'setdefault' not in t_tg_code and 'os.environ[k.strip()]=v.strip()' in t_tg_code)
 dead=grep('dewa_skill.py','build_extras','classify_momentum','enrich_briefing','obv_slope','kdj','stoch_rsi','rel_strength','spark(')
 check('dewa_skill bersih scalper pack', not dead, str(dead))
 dead=grep('hybrid_rules.py','gen_loose_fade','p6')

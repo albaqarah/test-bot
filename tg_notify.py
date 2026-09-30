@@ -19,13 +19,16 @@ def _wib_now():
 
 
 def _load_env(path=None):
+    """v7.1.1 #4: OVERRIDE PENUH (protokol P35, sama dgn dewa_live) — .env = sumber
+    kebenaran, selalu menang atas env warisan shell/PM2. setdefault lama bikin
+    env warisan (mis. dummy dari unit test) menang diam-diam."""
     path=path or os.path.join(os.path.dirname(os.path.abspath(__file__)),'.env')
     try:
         for line in open(path):
             line=line.strip()
             if line and not line.startswith('#') and '=' in line:
                 k,v=line.split('=',1)
-                os.environ.setdefault(k.strip(), v.strip())
+                os.environ[k.strip()]=v.strip()
     except Exception: pass
 _load_env()
 
