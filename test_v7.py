@@ -125,7 +125,7 @@ check('HTF fail-closed: data None = non-fade diblok', not any(s[1]=='L' for s in
 # ---------- 5. TYPE-GUARD BOS v7 (offline, _req di-mock) ----------
 _orig=jb._req; jb.KEY='test-key-offline'
 jb._req=lambda p: {'answers':{'decision':{'choice':'CONFIRMED_NORMAL','probabilities':{'CONFIRMED_NORMAL':0.8,'REJECT':0.2},'confidence':0.8}}}
-r=jb.call_jev({'symbol':'BTCUSDT','side':'LONG'})
+r=jb.call_jev({'symbol':'BTCUSDT','side':'LONG','mss':'MSS_BULLISH','engine':'scalp'})
 check('type-guard CONFIRMED_NORMAL', r['decision']=='CONFIRMED' and r['variant']=='NORMAL', str(r))
 jb._req=lambda p: {'answers':{'decision':{'choice':'MAYBE','probabilities':{},'confidence':0.5}}}
 r=jb.call_jev({'symbol':'BTCUSDT','side':'LONG'})
@@ -140,6 +140,20 @@ check('criteria 4 opsi', list(jb.CRITERIA)==['CONFIRMED_TIGHT','CONFIRMED_NORMAL
 check('v7.1 anti-chase di P5 persona', 'ANTI-CHASE' in jb.PERSONA_V7 and 'WAIT_FOR_RETRACE_TO_FVG' in jb.PERSONA_V7
       and '3.0 ATR' in jb.PERSONA_V7 and 'entryStatus' in jb.PERSONA_V7)
 check('v7.1 REJECT criteria sebut CHASE', 'CHASE' in jb.CRITERIA['REJECT'] and 'WAIT_FOR_RETRACE_TO_FVG' in jb.CRITERIA['REJECT'])
+# v7.2 FINAL SEAL: HARD RULE MSS
+check('v7.2 FINAL SEAL di P4 persona', 'FINAL SEAL' in jb.PERSONA_V7 and 'MISSING_STRUCTURE_CONFIRMATION' in jb.PERSONA_V7
+      and 'rsi6Realtime < 20' in jb.PERSONA_V7)
+check('v7.2 REJECT criteria sebut MISSING_STRUCTURE', 'MISSING_STRUCTURE_CONFIRMATION' in jb.CRITERIA['REJECT'])
+jb._req=lambda p: {'answers':{'decision':{'choice':'CONFIRMED_NORMAL','probabilities':{'CONFIRMED_NORMAL':0.9},'confidence':0.9}}}
+r=jb.call_jev({'symbol':'INJUSDT','side':'LONG','mss':'NONE','engine':'scalp'})
+check('v7.2 host-guard: mss NONE + scalp CONFIRMED -> dibuang REJECT', r['decision']=='REJECT' and 'FINAL-SEAL' in r.get('reason',''), str(r))
+r=jb.call_jev({'symbol':'WIFUSDT','side':'LONG','mss':'','engine':'trend','asset':{'rsi6Realtime':55}})
+check('v7.2 host-guard: mss kosong + trend -> REJECT juga', r['decision']=='REJECT', str(r))
+r=jb.call_jev({'symbol':'XAGUSDT','side':'SHORT','mss':'NONE','engine':'fade','asset':{'rsi6Realtime':88}})
+check('v7.2 pengecualian: fade RSI6 ekstrem 88 lolos', r['decision']=='CONFIRMED' and r['variant']=='NORMAL', str(r))
+r=jb.call_jev({'symbol':'ADAUSDT','side':'LONG','mss':'MSS_BULLISH','engine':'trend'})
+check('v7.2 mss ada -> CONFIRMED utuh', r['decision']=='CONFIRMED', str(r))
+jb._req=_orig
 
 # ---------- 6. PAYLOAD KONTRAK v7 ----------
 ds.btc_bias=lambda: {'bias':'UP','b5':'UP','b1':'UP'}

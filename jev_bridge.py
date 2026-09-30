@@ -55,6 +55,7 @@ P2 [MONEY-FLOW MATRIX] : Hitung arah aliran uang.
    - Logam: DXY Bullish -> BIAS SHORT LOGAM. DXY Bearish -> BIAS LONG LOGAM.
 P3 [HTF ALIGNMENT] : Validasi tren dari data Higher TF Kurir. Pastikan entry TF 5m tidak sedang menabrak dinding besar (misal: dilarang LONG jika HTF 1h sedang dump panik tanpa ekor bawah).
 P4 [MARKET STRUCTURE SHIFT] : Validasi pembalikan arah. MSS sah HANYA jika ada body candle yang close menembus swing high/low sebelumnya. Jika hanya ekor (wick) yang lewat, status MSS = FAILED.
+   [PATCH v7.2 - FINAL SEAL (HARD RULE MSS)] Jika variabel 'marketStructure' dari Kurir berstatus 'MSS—' atau Kosong (mss = NONE), kamu DILARANG NYATA mengeluarkan keputusan CONFIRMED_TIGHT, CONFIRMED_NORMAL, maupun CONFIRMED_WIDE untuk posisi engine Scalp/Trend. Keputusan WAJIB diturunkan menjadi REJECT dengan alasan: "MISSING_STRUCTURE_CONFIRMATION". Pengecualian HANYA berlaku jika engine_source adalah "fade" dengan RSI6 ekstrem (rsi6Realtime < 20 atau > 80).
 P5 [FVG MAGNET CHECK] : Cari celah Fair Value Gap. Jika FVG terdeteksi, tandai harganya. Sinyal terbaik adalah menunggu retrace ke area FVG. Jika tidak ada FVG, kurangi tingkat keyakinan, tapi jangan langsung di-reject jika volume_x tinggi.
    [PATCH v7.1 - ANTI-CHASE COMPILER GUARD] Jika data metrics menyatakan jarak entry > 3.0 ATR dari swing structure (entryStatus: CHASE, atrDistance > 3.0), kamu DILARANG MERESPON dengan CONFIRMED_NORMAL atau CONFIRMED_WIDE. Kamu WAJIB menurunkan keputusan menjadi REJECT dan memberikan catatan eksekusi: "WAIT_FOR_RETRACE_TO_FVG" — tunggu harga mendingin (retrace) ke dalam Fair Value Gap dulu.
 P6 [WICK EXTREME GUARD] : Jika RSI6 > 85/90 (Pucuk), dilarang keras membuka posisi LONG searah wick kecuali terjadi Liquidity Sweep yang terkonfirmasi MSS Balik Arah (Siap SHORT). Berlaku kebalikannya untuk RSI6 < 15/10.
@@ -66,7 +67,7 @@ CRITERIA={
  "CONFIRMED_TIGHT":  "EXECUTE presisi AGGRESSIVE: pipeline 1-8 semua selarah, arah 100% akurat, volatilitas terkendali, wick tipis. SL ketat 0.8%, TP 1:2.5.",
  "CONFIRMED_NORMAL": "EXECUTE standar STANDARD: arah akurat didukung money-flow ATAU MSS searah, struktur mikro sehat. SL 1.2%, TP 1:3.5.",
  "CONFIRMED_WIDE":   "EXECUTE CONSERVATIVE: arah benar tapi wick/likuiditas ganas — SL di luar struktur 1.8%, TP 1:4. Ukuran risiko nominal dikecilkan.",
- "REJECT":           "Layak ditolak: arah belum 100% akurat / melawan money-flow tanpa MSS / melakukan CHASE > 3.0 ATR dari swing structure (WAJIB WAIT_FOR_RETRACE_TO_FVG) / P8 internal < 0.55 / menabrak dinding HTF.",
+ "REJECT":           "Layak ditolak: arah belum 100% akurat / melawan money-flow tanpa MSS / melakukan CHASE > 3.0 ATR dari swing structure (WAJIB WAIT_FOR_RETRACE_TO_FVG) / MISSING_STRUCTURE_CONFIRMATION (mss NONE tanpa pengecualian fade) / P8 internal < 0.55 / menabrak dinding HTF.",
 }
 
 def _context(brief):
@@ -118,6 +119,28 @@ def call_jev(brief, symbol=''):
     else:
         out["decision"]="REJECT"
         out["reason"]=f"payload-cacat/choice-asing:{choice[:30]}"
+        return out
+
+    # ===== [v7.2 FINAL SEAL - HOST ENFORCER] =====
+    # Aturan P4 dieksekusi deterministik (bukan cuma prompt): mss NONE/kosong +
+    # engine bukan-fade-ekstrem = CONFIRMED dibuang ke REJECT paksa. Ini menutup
+    # kebocoran 3 SL (INJ/LTC/WIF 30 Sep): bos meloloskan entry tanpa MSS saat
+    # reversal. Pengecualian: fade dgn RSI6 realtime ekstrem (<20 / >80).
+    # CATATAN: detect_mss balikin STRING 'NONE' (truthy!) — wajib dinormalisasi,
+    # jangan pakai `not _mss` mentah (bug kelas ini pernah lolos di P36-era).
+    _mss=str((brief.get('mss') if isinstance(brief,dict) else '') or '').strip().upper()
+    _no_mss=(not _mss) or _mss in ('NONE','NULL','MSS—','MSS-') or _mss.startswith('NONE')
+    _eng=str((brief.get('engine','') if isinstance(brief,dict) else '') or '')
+    _r6=None
+    if isinstance(brief,dict):
+        _r6=(brief.get('metrics') or {}).get('rsi6Realtime')
+        if _r6 is None: _r6=(brief.get('asset') or {}).get('rsi6Realtime')
+    try: _r6=float(_r6) if _r6 is not None else None
+    except Exception: _r6=None
+    _fade_extreme=(_eng=='fade' and _r6 is not None and (_r6<20 or _r6>80))
+    if out["decision"]=="CONFIRMED" and _no_mss and not _fade_extreme:
+        out["decision"]="REJECT"; out["variant"]=""
+        out["reason"]="FINAL-SEAL v7.2: mss NONE -> MISSING_STRUCTURE_CONFIRMATION (bos lolos, host buang)"
         return out
 
     pj=', '.join(f"{k} {v:.2f}" for k,v in sorted(probs.items(), key=lambda x:-x[1])[:3])

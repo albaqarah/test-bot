@@ -7,6 +7,12 @@
 > Kurir = filter matematika KETAT di sumber; Bos = LLM jev dengan pipeline 8 langkah
 > TANPA rubric scoring; semua gate/tambalan era v6.7 yang bikin "penolak pasif" DIHAPUS.
 > Dokumen ini menggantikan ARSITEKTUR.md era v6.7 (P9-P39).
+>
+> **PATCH v7.2 "FINAL SEAL"** (30 Sep malam): HARD RULE MSS — mss NONE/kosong +
+> engine non-fade = CONFIRMED dibuang (bos prompt P4 + host-enforcer di call_jev,
+> REJECT: MISSING_STRUCTURE_CONFIRMATION). Pengecualian: fade dgn RSI6 realtime
+> ekstrem (<20/>80). Menutup kebocoran 3 SL beruntun 30 Sep (INJ/LTC/WIF: entry
+> tanpa MSS saat reversal 20:00 WIB).
 
 ---
 

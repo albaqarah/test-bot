@@ -1,4 +1,4 @@
-# DEWA Bot — TYPESAFE SNIPER v7.1 (Binance USDⓈ-M Futures 5m)
+# DEWA Bot — TYPESAFE SNIPER v7.2 (Binance USDⓈ-M Futures 5m)
 
 Bot trading futures Binance TF 5m: **KURIR v7.0** (3 engine preset: FADE CLIMAX /
 SCALP HIGH-MOMENTUM / TREND PULLBACK + HIGHER TF FILTER 15m/1h anti News-Pump-Dump)
