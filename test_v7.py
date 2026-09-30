@@ -9,6 +9,7 @@ import reversion_bot as rb
 import hybrid_rules as hr
 import dewa_skill as ds
 import jev_bridge as jb
+import smc_engine as smc
 
 PASS=0; FAIL=0
 def check(name, cond, detail=''):
@@ -222,6 +223,19 @@ check('jev402_hit: Jev402 terdeteksi', dl.jev402_hit(jb.Jev402('x')) is True)
 check('jev402_hit: string 402 terdeteksi', dl.jev402_hit(Exception('HTTP 402 Payment Required')) is True)
 check('jev402_hit: error biasa bukan 402', dl.jev402_hit(Exception('HTTP 429 too many')) is False)
 jb._req=_orig_req
+
+# ---------- 9. v7.2.1 STRICT MSS — ATR BARRIER ----------
+# CATATAN FORMAT: kk utk detect_mss = [o,h,l,c,v] (5 elemen, TANPA ts — sama spt smc_engine.klines()).
+_base=[[99.9,100.1,99.7,99.9,10.0] for i in range(30)]   # flat, ATR~0.44 (TR=0.4/bar), swing high fractal=100.1
+_big=_base[:]+[[100.0,100.95,99.9,100.85,50.0]]          # close 100.85 -> pen 0.75 >= 0.25*ATR(0.446)
+_r=smc.detect_mss(_big)
+check('v7.2.1 ATR barrier: pen 0.75 (>=0.25xATR) = MSS_BULLISH sah', _r['mss']=='MSS_BULLISH', str(_r))
+_tiny=_base[:]+[[99.9,100.2,99.8,100.12,50.0]]           # pen 0.02 << barrier (INJ 3-tick style)
+_r=smc.detect_mss(_tiny)
+check('v7.2.1 ATR barrier: pen secuil = NONE (MSS palsu dibuang)', _r['mss']=='NONE', str(_r))
+_short=_base[:8]+[[99.9,101.5,99.8,101.3,50.0]]           # 9 bar -> ATR tak cukup
+_r=smc.detect_mss(_short)
+check('v7.2.1 ATR barrier: data <15 bar = fail-closed NONE', _r['mss']=='NONE', str(_r))
 
 print(f"\n===== test_v7: {PASS} pass / {FAIL} fail =====")
 sys.exit(1 if FAIL else 0)
