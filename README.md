@@ -11,6 +11,17 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 ---
 
 
+## CHANGELOG v6.7 (30 Sep) - P39 STATE-PERSISTENCE FIX (cooldown bocor + trim arbitrer)
+- P39: BUG P30 — reject_cd ditulis SETELAH save_state terakhir (dan save berikutnya cuma saat CONFIRMED)
+  → iterasi semua-REJECT gak pernah persist cooldown → **303 panggilan jev kebuang/24 jam**
+  (LINK SHORT 55x, XAU 53x, TIA 31x, AAVE 14x — jawaban sama dibayar berulang). FIX: tulis SEBELUM save_state
+- P39: done trim `list(set)[-600:]` ARBITRER (urutan hash, bukan kronologis) → kunci BARU kebuang tiap trim
+  (red flag: done selalu tepat 600). FIX: `sorted(done, key=bar_ts)[-2000:]`
+- Test: test_p39 9/9 (termasuk bukti perilaku lama kehilangan key terbaru); live post-deploy: repeat <15m = 0
+- Forensik TIA/PAXG (pre-P38 trades): TIA SHORT ditembak 0.37 ATR dari lembah (kontra lokasi),
+  PAXG LONG dibeli 0.06 ATR dari pucuk — entryLoc P38-C setuju dgn bacaan manual user; kasus = timing lokasi,
+  obatnya udah live (P38b lensa fade + P38c entryLoc), pantau 24 jam
+
 ## CHANGELOG v6.6 (30 Sep) - P36-P38 EYES ON + FADE LENS + ENTRY LOC + ARGMAX→TOTAL
 - P36: fix bug satuan SL (slSuggest % dibaca fraksi → SL -208% WLD) — konversi /100 + SANITY GUARD SL 0.3-3.0%;
   3 mata bos yang mati senyap dinyalakan (btc_bias, money-flow UP→BULLISH, momentum_class ke briefing)

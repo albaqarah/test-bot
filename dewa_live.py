@@ -356,6 +356,13 @@ def _p38_dry_pass(vcls, wh):
     al=(wh.get('dir') in ('LONG','SHORT'))
     return (vcls=='kering') and not (al and s>=55)
 
+def _p39_trim(done, cap=2000):
+    """P39 BUGFIX (ACC 30 Sep): trim done by bar_ts TERBARU.
+    Dulu list(done)[-600:] — done itu SET, urutan list()-nya ARBITRARY (hash-based,
+    bukan insertion/time) -> kunci BARU ikut kebuang tiap trim (bukti: AAVE:S nanya
+    bos 11x/11 menit, key-nya gak ada di done; done selalu penuh pas 600)."""
+    return [list(k) for k in sorted(done, key=lambda k: k[1])[-cap:]]
+
 def iterate(once=False):
     """Wrapper anti-race: cuma SATU proses boleh mutasi state (file-lock).
     Main loop = PRIORITAS: nunggu sampai 90 detik. Watchdog/cron = fallback: skip kalau sibuk."""
@@ -488,7 +495,7 @@ def _iterate_inner(once=False):
         except Exception as e:
             log({'event':'err','symbol':sym,'msg':str(e)[:80]})
         st.setdefault('last_seen',{})[sym]=kk[-1][0]
-    st['done']=[list(k) for k in list(done)[-600:]]  # persist dedup (cap 600)
+    st['done']=_p39_trim(done)  # persist dedup (P39: trim by bar_ts, cap 2000)
     # 3) bos putuskan (batch, urut grade A dulu)
     candidates.sort(key=lambda x:(x['grade']!='A', x.get('battery')!='FULL', x['sym']))
     confirmed=0
@@ -526,17 +533,21 @@ def _iterate_inner(once=False):
         log({'event':'decision','symbol':cd['sym'],'side':cd['side'],'grade':cd['grade'],
              'decision':d.get('decision'),'conf':d.get('confidence'),
              'reason':d.get('reason'),'factor':d.get('key_factor')})
+        # P39 FIX (ACC 30 Sep): reject_cd ditulis SEBELUM save_state — dulu ditulis
+        # SETELAH save terakhir (535) & save berikutnya cuma terjadi saat CONFIRMED (695)
+        # -> iterasi semua-REJECT gak pernah persist cooldown -> 303 panggilan jev
+        # berulang <15m per 24 jam (LINK 55x, XAU 53x, TIA 31x, AAVE 14x).
+        if d.get('decision')=='REJECT':
+            st.setdefault('reject_cd',{})[cd['sym']+':'+_side]=time.time()*1000+15*60*1000
         if d.get('decision') not in ('CONFIRMED','REJECT'):
             # llm_err/gateway mati: JANGAN dedup permanen — lepas dari done supaya iterasi
             # berikutnya nanya lagi ke bos (bug UNI-A 20:40 WIB: grade A hilang selamanya)
             done.discard(cd.get('key'))
-            st['done']=[list(k) for k in list(done)[-600:]]
+            st['done']=_p39_trim(done)
             log({'event':'retry_later','symbol':cd['sym'],'msg':'llm_err -> kandidat diulang iterasi berikut'})
-        save_state(st)  # persist done-list juga (dedup lintas restart)
+        save_state(st)  # persist done-list + reject_cd (P39) lintas restart
         # P30 REJECT-COOLDOWN: REJECT = jangan tanya bos utk (sym,side) yg sama dlm 15 menit — hemat API jev
         # (kasus P29: ATOM SHORT ditanya 40x/2jam = 44% budget jev terbuang utk jawaban sama)
-        if d.get('decision')=='REJECT':
-            st.setdefault('reject_cd',{})[cd['sym']+':'+_side]=time.time()*1000+15*60*1000
         if d.get('decision')!='CONFIRMED': continue
         # P16-B: WICK-EXTREME FLIP — bos dilarang ACC searah wick ekstrem. Kalau sinyal LONG datang
         # pas RSI6 realtime > 90 (pucuk), bos membalik jadi SHORT (peluang valid fade). Mirror SHORT < 10 → LONG.
