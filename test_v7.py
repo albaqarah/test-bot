@@ -70,9 +70,13 @@ def scalp_case(o,h,l,cx,vx,reds=0):
     vm=[0.0]*len(vv)
     for i in range(20,len(vv)): vm[i]=sum(vv[i-20:i])/20
     return hr.gen_scalp_momentum(k,rr,vm)
-check('scalp volx>=1.5 body>60% LONG', any(s[1]=='L' for s in scalp_case(99.5,102.5,99.4,102.3,25.0,reds=2)))
-check('scalp volx<1.5 ditolak', not scalp_case(99.5,102.5,99.4,102.3,12.0,reds=2))
-check('scalp body<=60% ditolak', not scalp_case(99.5,103.0,98.5,101.0,25.0,reds=2))
+check('scalp v7.1: volx>=1.2 LONG (volx besar + body besar tetap masuk)', any(s[1]=='L' for s in scalp_case(99.5,102.5,99.4,102.3,25.0,reds=2)))
+check('scalp v7.1: volx<1.2 ditolak', not scalp_case(99.5,102.5,99.4,102.3,11.0,reds=2))
+check('scalp v7.1: body kecil (33%) TETAP lolos — kualitas body dinilai bos', any(s[1]=='L' for s in scalp_case(99.5,103.0,98.5,101.0,25.0,reds=2)),
+      str(scalp_case(99.5,103.0,98.5,101.0,25.0,reds=2)))
+check('scalp grade: volx 1.4=B, volx>=2.0=A',
+      (scalp_case(99.5,102.5,99.4,102.3,14.0,reds=2) or [(0,0,'X')])[0][2]=='B' and
+      (scalp_case(99.5,102.5,99.4,102.3,25.0,reds=2) or [(0,0,'X')])[0][2]=='A')
 # P12 guard: LONG di RSI6>85 diblokir -> bikin bar naik terus sblm breakout
 k=base_kk(300)
 for i in range(280,300): k[i]=[i*300000, 100+i-280, 100.6+i-280, 99.9, 100.5+i-280, 10.0]  # naik terus
@@ -104,6 +108,9 @@ check('HTF: scalp LONG lolos EMA20>E50', any(s[1]=='L' and s[3]=='scalp' for s i
 check('HTF: 1h BEARISH_EXTREME blok LONG non-fade', not htf_case('scalp',12.0,11.0,'BEARISH_EXTREME_DUMP'))
 check('HTF: fade LONG DIKECUALIKAN dr filter', any(s[1]=='L' and s[3]=='fade' for s in htf_case('fade',10.0,11.0,'BEARISH_EXTREME_DUMP')),
       str(htf_case('fade',10.0,11.0,'BEARISH_EXTREME_DUMP')))
+# v7.1: konflik fade LONG vs scalp SHORT di bar washout — fade menang, sinyal gak dibuang
+res=htf_case('fade',12.0,11.0)
+check('v7.1 konflik fade vs scalp: fade menang (sinyal hidup)', any(s[1]=='L' and s[3]=='fade' for s in res), str(res))
 # fail-closed: data HTF None = non-fade diblok
 k=base_kk(300)
 for j in range(2):
@@ -129,6 +136,10 @@ check('REJECT sah dgn prob', r['decision']=='REJECT' and r['probs'].get('REJECT'
 jb._req=_orig
 check('persona v7 verbatim', 'DILARANG KERAS' in jb.SYSTEM_IMMUNITY and 'TYPESAFE SNIPER v7.0' in jb.PERSONA_V7 and '8 LANGKAH' in jb.PERSONA_V7 and 'P8' in jb.PERSONA_V7)
 check('criteria 4 opsi', list(jb.CRITERIA)==['CONFIRMED_TIGHT','CONFIRMED_NORMAL','CONFIRMED_WIDE','REJECT'])
+# v7.1 ANTI-CHASE COMPILER GUARD
+check('v7.1 anti-chase di P5 persona', 'ANTI-CHASE' in jb.PERSONA_V7 and 'WAIT_FOR_RETRACE_TO_FVG' in jb.PERSONA_V7
+      and '3.0 ATR' in jb.PERSONA_V7 and 'entryStatus' in jb.PERSONA_V7)
+check('v7.1 REJECT criteria sebut CHASE', 'CHASE' in jb.CRITERIA['REJECT'] and 'WAIT_FOR_RETRACE_TO_FVG' in jb.CRITERIA['REJECT'])
 
 # ---------- 6. PAYLOAD KONTRAK v7 ----------
 ds.btc_bias=lambda: {'bias':'UP','b5':'UP','b1':'UP'}
@@ -140,6 +151,7 @@ check('payload asset.class', p['asset']['class']=='CRYPTO' and p['asset']['ticke
 check('payload HTF', p['higher_tf_alignment']['tf_15m_ema_cross']=='BULLISH' and p['higher_tf_alignment']['vol_x_1h']==1.7)
 check('payload macro', p['macro_matrix']['btc_bias']=='UP')
 check('payload metrics', p['metrics']['volx'] is not None and 'zScore' in p['metrics'] and 'wick_ratio_pct' in p['metrics'])
+check('v7.1 payload metrics anti-chase fields', 'entryStatus' in p['metrics'] and 'atrDistance' in p['metrics'])
 check('payload engine+side', p['engine']=='fade' and p['side']=='LONG')
 pm=ds.build_payload_v7('XAUUSDT',kk,'S','A','fade','RANGE',0.0,maps)
 check('payload metal', pm['asset']['class']=='TRADFI_METAL' and pm['asset']['ticker']=='XAUUSD')
@@ -150,8 +162,11 @@ def grep(fname, *pats):
     t=re.sub(r'"""[\s\S]*?"""', ' ', t)   # buang docstring
     t=re.sub(r"#.*", '', t)                   # buang komentar
     return {p: len(re.findall(rf'\b{re.escape(p)}\b', t)) for p in pats if re.search(rf'\b{re.escape(p)}\b', t)}
-dead=grep('dewa_live.py','MIN_CONF','P6_LOOSE','momentumBattery','reversal_hint','pipeline_log','tv_ta','_p38_dry_pass','skip_dry','battery','vision','rubric','build_extras','BE_TRIG','BE_OFF')
+dead=grep('dewa_live.py','MIN_CONF','P6_LOOSE','momentumBattery','reversal_hint','pipeline_log','tv_ta','_p38_dry_pass','skip_dry','battery','vision','rubric','build_extras','BE_TRIG','BE_OFF','_flipped','wick_flip')
 check('dewa_live bersih kode mati', not dead, str(dead))
+# v7.1: wick-flip P16-B DIMUSNAHKAN — flip arah mekanis gak boleh balik lagi
+t_live=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'dewa_live.py')).read()
+check('v7.1 wick-flip musnah total', 'wick_flip' not in t_live and 'WICK-FLIP' not in t_live and "_flipped" not in t_live)
 dead=grep('dewa_skill.py','build_extras','classify_momentum','enrich_briefing','obv_slope','kdj','stoch_rsi','rel_strength','spark(')
 check('dewa_skill bersih scalper pack', not dead, str(dead))
 dead=grep('hybrid_rules.py','gen_loose_fade','p6')

@@ -109,7 +109,9 @@ def gen_fade_climax(kk, rs, zz, vsma):
 
 def gen_scalp_momentum(kk, rs, vsma):
     """ENGINE 2 — SCALP HIGH-MOMENTUM (agresif di pasar aktif):
-    Trigger tunggal: vol_x >= 1.5 + breakout body > 60% searah.
+    Trigger tunggal: vol_x >= 1.2 (v7.1 — dilonggarkan dr 1.5; grade A scalp
+    tetap vol_x >= 2.0). Filter body>60% v7.0 DIHAPUS — kualitas struktur body
+    dinilai bos via data kontrak JSON, bukan dicegat di kurir.
     Guard P12: BLOKIR LONG jika RSI6 > 85; BLOKIR SHORT jika RSI6 < 15."""
     sigs = []
     o = [r[1] for r in kk]; h = [r[2] for r in kk]; l = [r[3] for r in kk]
@@ -118,9 +120,7 @@ def gen_scalp_momentum(kk, rs, vsma):
         rng = h[i] - l[i]
         if rng <= 0: continue
         volx = v[i] / vsma[i] if vsma[i] else 0
-        if volx < 1.5: continue
-        body = abs(c[i] - o[i]) / rng
-        if body <= 0.60: continue
+        if volx < 1.2: continue                 # v7.1: 1.5 -> 1.2 (sat-set kembali)
         x6 = rs[i]
         if c[i] > o[i]:
             if x6 is not None and x6 <= 85:   # P12 anti-pucuk
@@ -198,7 +198,14 @@ def gen_hybrid(kk, rs, zz, vsma, htf15, htf1h_struct, extra_engines=None, cek_1h
     for i in sorted(by_bar):
         ss = by_bar[i]
         sides = {s[0] for s in ss}
-        if len(sides) > 1: continue        # arah bentrok di bar sama = kabut, buang
+        if len(sides) > 1:
+            # v7.1: konflik antar-engine di bar sama (fade LONG vs scalp SHORT di bar
+            # washout, RSI6 15-20) — FADE MENANG, sinyal JANGAN dibuang (patch v7.1:
+            # bos yang menilai, kurir gak boleh bikin sinyal sepi). Fade = engine
+            # climax di bar itu; scalp cuma momentum searah wick.
+            ss = [s for s in ss if s[2] == 'fade'] or ss
+            sides = {s[0] for s in ss}
+            if len(sides) > 1: continue        # tetap bentrok (tak mungkin) = kabut
         grade = 'A' if (len(ss) > 1 or any(s[1] == 'A' for s in ss)) else 'B'
         out.append((i, ss[0][0], grade, ss[0][2]))
     return out

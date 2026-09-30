@@ -132,6 +132,9 @@ def build_payload_v7(sym, kk, side, grade, src, regime, funding, htf_maps):
             "rsi6": round(r6,1) if r6 is not None else None,
             "rsi6_spark": sp,
             "freshnessMinutes": 0,
+            # v7.1 ANTI-CHASE (di-upgrade dewa_live dari entryLoc host):
+            # CHASE/atrDistance>3.0 -> bos WAJIB REJECT + WAIT_FOR_RETRACE_TO_FVG (P5 guard).
+            "entryStatus": None, "atrDistance": None, "swingAgeBars": None,
         },
         "context": {"funding": funding, "candle": {
             "ts": kk[i][0], "o": o[i], "h": h[i], "l": l[i], "c": c[i], "volx": round(volx,2)}},

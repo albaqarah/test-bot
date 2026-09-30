@@ -387,7 +387,7 @@ def _iterate_inner(once=False):
                     except Exception: pass
                     try:
                         import market_snapshot as _mkt
-                        _mkt.enrich_market(brief, sym, kk, rs)
+                        _mkt.enrich_market(brief, sym, kk, rs, i=i)   # v7.1: entryLoc diukur di bar kandidat
                         if brief.get('wickHint') and brief['wickHint'].get('dir')!='NONE':
                             log({'event':'wick_hint','symbol':sym,'side':side,
                                  'hint':brief['wickHint'].get('dir'),
@@ -399,6 +399,16 @@ def _iterate_inner(once=False):
                         if _px:
                             brief.setdefault('metrics',{})['rsi6Realtime']=round(
                                 rb.rsi6([float(r[4]) for r in kk[-19:]]+[[0,0,0,0,_px,0]])[-1],1)
+                    except Exception: pass
+                    # v7.1 ANTI-CHASE DATA PLUMBING: entryLoc (host, gratis) -> metrics kontrak bos.
+                    # Bos P5 (ANTI-CHASE COMPILER GUARD) WAJIB REJECT + WAIT_FOR_RETRACE_TO_FVG
+                    # saat entryStatus=CHASE / atrDistance > 3.0.
+                    try:
+                        _el=brief.get('entryLoc') or {}
+                        if _el.get('loc'):
+                            brief.setdefault('metrics',{})['entryStatus']=str(_el['loc']).upper()
+                            brief['metrics']['atrDistance']=_el.get('swing_dist_atr')
+                            brief['metrics']['swingAgeBars']=_el.get('swing_age_bars')
                     except Exception: pass
                     # P14 TRADFI GATE: blok entry 3 jam sebelum break/close (anti volume kopong)
                     if sym in tfs.TRADFI:
@@ -455,23 +465,9 @@ def _iterate_inner(once=False):
         # P30 REJECT-COOLDOWN: REJECT = jangan tanya bos utk (sym,side) yg sama dlm 15 menit — hemat API jev
         # (kasus P29: ATOM SHORT ditanya 40x/2jam = 44% budget jev terbuang utk jawaban sama)
         if d.get('decision')!='CONFIRMED': continue
-        # P16-B WICK-EXTREME FLIP (dipertahankan v7.0 — bukti ARB/NEAR): sinyal ACC searah wick
-        # ekstrem DIBALIK (fade climax sah). RSI6 realtime = metrics.rsi6Realtime (kontrak v7).
-        _r6rt=(cd.get('brief') or {}).get('metrics',{}).get('rsi6Realtime')
-        _flipped=False
-        try:
-            _r6f=float(_r6rt) if _r6rt is not None else None
-        except Exception: _r6f=None
-        _old_side=cd['side']
-        if _r6f is not None and _old_side=='LONG' and _r6f>90:
-            cd['side']='SHORT'; _flipped=True
-        elif _r6f is not None and _old_side=='SHORT' and _r6f<10:
-            cd['side']='LONG'; _flipped=True
-        if _flipped:
-            reason=(d.get('reason','') or '')+f' [WICK-FLIP: sinyal dibalik — RSI6 realtime {_r6f} ekstrem, arah lama searah wick]'
-            d['reason']=reason
-            log({'event':'wick_flip','symbol':cd['sym'],'rsi6':_r6f,
-                 'old_side':_old_side,'new_side':cd['side']})
+        # v7.1: Wick-flip P16-B DIMUSNAHKAN — keputusan arah bos mutlak (patch user:
+        # flip mekanis di eksekutor = penyebab lose tersembunyi). Gak ada intervensi
+        # arah lagi antara jawaban bos dan TradeExecutor.
         if n_open+confirmed>=og.MAX_GLOBAL_POSITIONS:
             log({'event':'skip_full','symbol':cd['sym']}); continue
         # P9 RESTRUKTURISASI: hitung entry/side/SL/TP SEBELUM cabang LIVE/dry.

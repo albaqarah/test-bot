@@ -56,6 +56,7 @@ P2 [MONEY-FLOW MATRIX] : Hitung arah aliran uang.
 P3 [HTF ALIGNMENT] : Validasi tren dari data Higher TF Kurir. Pastikan entry TF 5m tidak sedang menabrak dinding besar (misal: dilarang LONG jika HTF 1h sedang dump panik tanpa ekor bawah).
 P4 [MARKET STRUCTURE SHIFT] : Validasi pembalikan arah. MSS sah HANYA jika ada body candle yang close menembus swing high/low sebelumnya. Jika hanya ekor (wick) yang lewat, status MSS = FAILED.
 P5 [FVG MAGNET CHECK] : Cari celah Fair Value Gap. Jika FVG terdeteksi, tandai harganya. Sinyal terbaik adalah menunggu retrace ke area FVG. Jika tidak ada FVG, kurangi tingkat keyakinan, tapi jangan langsung di-reject jika volume_x tinggi.
+   [PATCH v7.1 - ANTI-CHASE COMPILER GUARD] Jika data metrics menyatakan jarak entry > 3.0 ATR dari swing structure (entryStatus: CHASE, atrDistance > 3.0), kamu DILARANG MERESPON dengan CONFIRMED_NORMAL atau CONFIRMED_WIDE. Kamu WAJIB menurunkan keputusan menjadi REJECT dan memberikan catatan eksekusi: "WAIT_FOR_RETRACE_TO_FVG" — tunggu harga mendingin (retrace) ke dalam Fair Value Gap dulu.
 P6 [WICK EXTREME GUARD] : Jika RSI6 > 85/90 (Pucuk), dilarang keras membuka posisi LONG searah wick kecuali terjadi Liquidity Sweep yang terkonfirmasi MSS Balik Arah (Siap SHORT). Berlaku kebalikannya untuk RSI6 < 15/10.
 P7 [DYNAMIC RISK ESTIMATION] : Tentukan penempatan Stop Loss aman. Dilarang menggunakan SL buta 0.8% jika volatilitas/wick sedang ganas. SL wajib diletakkan di luar swing low/high struktur terdekat.
 P8 [CONFIDENCE EVALUATION] : Hitung total bobot keyakinan: RSI & Volume (50%) + Makro/MSS/HTF (50%). Jika total nilai logika dirasa ragu atau skor kalkulasi internal < 0.55 -> Keputusan WAJIB = REJECT."""
@@ -65,7 +66,7 @@ CRITERIA={
  "CONFIRMED_TIGHT":  "EXECUTE presisi AGGRESSIVE: pipeline 1-8 semua selarah, arah 100% akurat, volatilitas terkendali, wick tipis. SL ketat 0.8%, TP 1:2.5.",
  "CONFIRMED_NORMAL": "EXECUTE standar STANDARD: arah akurat didukung money-flow ATAU MSS searah, struktur mikro sehat. SL 1.2%, TP 1:3.5.",
  "CONFIRMED_WIDE":   "EXECUTE CONSERVATIVE: arah benar tapi wick/likuiditas ganas — SL di luar struktur 1.8%, TP 1:4. Ukuran risiko nominal dikecilkan.",
- "REJECT":           "Layak ditolak: arah belum 100% akurat, melawan money-flow tanpa MSS, P8 internal < 0.55, atau menabrak dinding HTF.",
+ "REJECT":           "Layak ditolak: arah belum 100% akurat / melawan money-flow tanpa MSS / melakukan CHASE > 3.0 ATR dari swing structure (WAJIB WAIT_FOR_RETRACE_TO_FVG) / P8 internal < 0.55 / menabrak dinding HTF.",
 }
 
 def _context(brief):
