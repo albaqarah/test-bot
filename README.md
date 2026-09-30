@@ -1,4 +1,4 @@
-# DEWA Bot — TYPESAFE SNIPER v7.2 (Binance USDⓈ-M Futures 5m)
+# DEWA Bot — TYPESAFE SNIPER v7.2.2 (Binance USDⓈ-M Futures 5m)
 
 Bot trading futures Binance TF 5m: **KURIR v7.0** (3 engine preset: FADE CLIMAX /
 SCALP HIGH-MOMENTUM / TREND PULLBACK + HIGHER TF FILTER 15m/1h anti News-Pump-Dump)
@@ -12,6 +12,19 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 
 ---
 
+
+## CHANGELOG v7.2.2 (1 Okt) - RATIO LOCK (seal escape hatch pengecualian fade)
+- Host-enforcer jev_bridge: pengecualian fade atas MSS-NONE kini 3 SYARAT KUMULATIF (directive user):
+  engine fade + RSI6 ekstrem (<20/>80) + volx >= 1.2 + wick_ratio_pct >= 40% (ekor arah sinyal:
+  LONG baca low, SHORT baca high). Gugur satu -> REJECT `INVALID_FADE_NO_CLIMAX_VOLUME`. Data climax
+  hilang = fail-closed REJECT.
+- Persona P4 + criteria REJECT di-sync (teks 3 syarat) — aturan hidup di kode DAN di ingatan bos.
+- test_v7 63/63 (5 check baru: pengecualian penuh lolos, volx kurang, wick kurang, tanpa data = fail-closed,
+  RSI6 netral tetap REJECT).
+- Catatan replay forensik APT 01:56 WIB (kasus pemicu): APT ternyata punya MSS_BEARISH (bukan NONE) dan
+  climax penuh (RSI6 14.3, volx 3.55, wick 53%) — kekalahan APT bukan lewat celah pengecualian; patch tetap
+  dieksekusi utk menutup kelas bocor fade-murah di masa depan.
+---
 
 ## CHANGELOG v6.7 (30 Sep) - P39 STATE-PERSISTENCE FIX (cooldown bocor + trim arbitrer)
 - P39: BUG P30 — reject_cd ditulis SETELAH save_state terakhir (dan save berikutnya cuma saat CONFIRMED)
