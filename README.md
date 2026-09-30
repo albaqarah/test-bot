@@ -1,7 +1,9 @@
-# DEWA Bot — V15 Evolution (Binance USDⓈ-M Futures 5m)
+# DEWA Bot — TYPESAFE SNIPER v7.0 (Binance USDⓈ-M Futures 5m)
 
-Bot trading futures Binance TF 5m: **algoritma matematika = kurir** sinyal grade A/B →
-**1 LLM agent ("SNIPER LIKUIDITAS") = bos** final entry. Mode default **DRY RUN**
+Bot trading futures Binance TF 5m: **KURIR v7.0** (3 engine preset: FADE CLIMAX /
+SCALP HIGH-MOMENTUM / TREND PULLBACK + HIGHER TF FILTER 15m/1h anti News-Pump-Dump)
+→ **BOS jev persona v7.0** (pipeline P1-P8, TANPA rubric scoring) → eksekusi
+virtual/live. Mode default **DRY RUN**
 (eksekusi virtual, tanpa API key Binance, tanpa risiko duit).
 
 Fitur: notifikasi Telegram per entry/exit (win/lose + saldo net + reasoning bos LLM),

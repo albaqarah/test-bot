@@ -1,182 +1,204 @@
 #!/usr/bin/env python3
 """
-hybrid_rules.py - Mode HYBRID: fade ekstrem + trend-following pullback.
-Dua mesin sinyal jalan bareng:
-1. FADE (lama): RSI ekstrem + z ekstrem + wick 0.15 + vol climax  -> lawan arah
-2. TREND (baru): HTF bias (EMA20 15m+1h searah) + pullback + rejection candle + vol > 0.8x
-   - TREND_UP: LONG saat pullback berakhir (candle reversal naik deket EMA20 15m)
-   - TREND_DOWN: SHORT saat rally berakhir (candle reversal turun deket EMA20 15m)
-Grade: A = kedua mesin sepakat / konfluensi penuh; B = 1 mesin doang
-Semua tetap lolos bos LLM sebelum entry.
+hybrid_rules.py — KURIR ENGINE PROTOCOL v7.0 (STRICT MATHEMATICAL FILTER)
+Rombak total 30 Sep 2026 (ACC user "Pokoknya gw mau rombak total... Titik!"):
+- 3 engine preset: FADE CLIMAX / SCALP HIGH-MOMENTUM / TREND PULLBACK
+- HIGHER TF FILTER (Anti-Trap): WAJIB EMA20 vs EMA50 (15m) + struktur 1h
+- P6-loose & scalp momentum-turn (era v6.7) DIHAPUS — sumber 16/23 sinyal RSI netral
+- wick 0.15 (era lama) dibuang; fade pakai wick>=40% sesuai spec v7.0
+Semua kandidat tetap lolos bos jev (persona v7.0) sebelum entry.
 """
 import reversion_bot as rb
 import os
 
-def ema_series(vals,n):
-    k=2/(n+1); out=[vals[0]]
-    for v in vals[1:]: out.append(v*k+out[-1]*(1-k))
+
+def ema_series(vals, n):
+    k = 2 / (n + 1); out = [vals[0]]
+    for v in vals[1:]:
+        out.append(v * k + out[-1] * (1 - k))
     return out
 
-def gen_trend_signals(kk, rs, htf15, htf60, vsma):
-    """Sinyal trend-following pullback. htf15/htf60 = list EMA20 aligned ke index 5m."""
-    sigs=[]
-    o=[r[1] for r in kk]; h=[r[2] for r in kk]; l=[r[3] for r in kk]; c=[r[4] for r in kk]; v=[r[5] for r in kk]
-    for i in range(60,len(c)-2):
-        e15=htf15[i] if i<len(htf15) else None
-        e60=htf60[i] if i<len(htf60) else None
-        if e15 is None or e60 is None: continue
-        rng=h[i]-l[i]
-        if rng<=0: continue
-        body=abs(c[i]-o[i])
-        volx=v[i]/vsma[i] if vsma[i] else 1
-        # TREND UP + LONG pullback
-        if c[i]>e60 and e15>e60:
-            # pullback: harga nyentuh deket EMA20 15m lalu reversal
-            near_ema = l[i] <= e15*1.001 and c[i] > o[i]          # sentuh EMA, close hijau
-            rsi_ok = 35 <= rs[i] <= 60                             # bukan overbought
-            wick = (min(o[i],c[i])-l[i])/rng
-            if near_ema and rsi_ok and wick>=0.40 and volx>1.0:
-                grade = 'A' if volx>1.5 and wick>=0.55 else 'B'
-                sigs.append((i,'L',grade))
-        # TREND DOWN + SHORT rally
-        elif c[i]<e60 and e15<e60:
-            near_ema = h[i] >= e15*0.999 and c[i] < o[i]
-            rsi_ok = 40 <= rs[i] <= 65
-            wick = (h[i]-max(o[i],c[i]))/rng
-            if near_ema and rsi_ok and wick>=0.40 and volx>1.0:
-                grade = 'A' if volx>1.5 and wick>=0.55 else 'B'
-                sigs.append((i,'S',grade))
-    return sigs
-
-def gen_hybrid(kk, rs, zz, vsma, htf15, htf60, extra_engines=None):
-    """Gabung fade + trend + (opsional) P6-loose & P5-scalp, dedupe per bar.
-    extra_engines: None | 'p6' (fade longgar, toggle .env P6_LOOSE=on)
-                   | 'scalp' (kurir momentum) | 'all'
-    Output: (idx, side, grade, src) — src utk freshness window di dewa_live."""
-    fade=rb.gen_signals(kk,rs,zz,vsma)
-    trend=gen_trend_signals(kk,rs,htf15,htf60,vsma)
-    allsigs=[(s[0],s[1],s[2],'fade') for s in fade]+[(s[0],s[1],s[2],'trend') for s in trend]
-    if extra_engines in ('p6','all'):
-        allsigs+=[(s[0],s[1],s[2],'p6') for s in gen_loose_fade(kk,rs,zz,vsma)]
-    if extra_engines in ('scalp','all'):
-        allsigs+=[(s[0],s[1],s[2],'scalp') for s in gen_scalp(kk,rs,zz,vsma)]
-    by_bar={}
-    for s in allsigs: by_bar.setdefault(s[0],[]).append(s)
-    out=[]
-    for i,ss in sorted(by_bar.items()):
-        # kalau arah bentrok di bar sama -> skip (kabut)
-        sides={s[1] for s in ss}
-        if len(sides)>1: continue
-        # prioritas grade A; dua engine sepakat -> A; source engine pertama
-        grades=[s[2] for s in ss]
-        grade='A' if (len(ss)>1 or 'A' in grades) else 'B'
-        out.append((i, ss[0][1], grade, ss[0][3]))
-    return out
-
-def gen_loose_fade(kk, rs, zz, vsma):
-    """P6 — fade longgar, 2 varian dari backtest 30 hari (keduanya expectancy positif):
-       A: z>=3.0 bypass imb (RSI ekstrem tetap)  |  B: RSI 70/30 + z>2.5 + imb standar
-       Grade B (belum pernah dibuktikan lebih baik dr grade A fade asli)."""
-    sigs=[]
-    o=[r[1] for r in kk]; h=[r[2] for r in kk]; l=[r[3] for r in kk]; c=[r[4] for r in kk]
-    for i in range(210,len(c)-2):
-        r=rs[i]; z=zz[i]
-        if r is None or z is None: continue
-        rng=h[i]-l[i]
-        if rng<=0: continue
-        imb=((min(o[i],c[i])-l[i])-(h[i]-max(o[i],c[i])))/rng
-        if r>75 and z>=3.0 and imb>=-0.5: sigs.append((i,'S','B'))
-        elif r<25 and z<=-3.0 and imb<=0.5: sigs.append((i,'L','B'))
-        elif r>70 and z>2.5 and imb>=0.15: sigs.append((i,'S','B'))
-        elif r<30 and z<-2.5 and imb<=-0.15: sigs.append((i,'L','B'))
-    return sigs
-
-def rsi6(c, n=6):
-    """RSI cepat ala layar scalper (Wilder)."""
-    out=[None]*len(c); g=l2=0.0
-    for i in range(1,n+1):
-        d=c[i]-c[i-1]; g+=max(d,0); l2+=max(-d,0)
-    ag,al=g/n,l2/n; out[n]=100-100/(1+ag/al) if al else 100.0
-    for i in range(n+1,len(c)):
-        d=c[i]-c[i-1]; ag=(ag*(n-1)+max(d,0))/n; al=(al*(n-1)+max(-d,0))/n
-        out[i]=100-100/(1+ag/al) if al else 100.0
-    return out
-
-def gen_scalp(kk, rs, zz, vsma, obv=None):
-    """P8 REV — kurir momentum scalper:
-       Trigger (salah satu):
-         1) stochRSI(window 14 bar, dibangun dari RSI6) belok dari ekstrem (>80 turun = SHORT / <20 naik = LONG)
-         2) RSI(6) belok dari ekstrem (>80 turun / <20 naik) — persis layar scalper (pucuk BTC 20:44: RSI6 84)
-         3) breakout: volx>2.5 + body>60% range searah
-       Konfirmasi: volx>=1.2. OBV = SOFT-VETO: nolak hanya jika OBV 10-bar MELAWAN KERAS
-       (|obv10| > 3x vol rata2 terhadap arah trade) — dulu hard-gate OBV<0 membunuh SHORT pucuk
-       yang valid (OBV selalu positif habis rally = kontradiktif dgn momentum lanjutan).
-       Grade A = volx>=1.5, B = sisanya."""
-    sigs=[]
-    o=[r[1] for r in kk]; h=[r[2] for r in kk]; l=[r[3] for r in kk]; c=[r[4] for r in kk]; v=[r[5] for r in kk]
-    rs2=_stoch_from_rsi(rs)
-    r6=rsi6(c)
-    if obv is None:
-        obv=[0.0]
-        for i in range(1,len(c)):
-            obv.append(obv[-1]+(v[i] if c[i]>c[i-1] else (-v[i] if c[i]<c[i-1] else 0)))
-    avgv=[None]*20
-    for i in range(20,len(c)): avgv.append(sum(v[i-20:i])/20)
-    for i in range(210,len(c)-2):
-        if i<1: continue
-        a=rs2[i]; b=rs2[i-1]
-        if a is None or b is None: continue
-        rng=h[i]-l[i]
-        if rng<=0 or vsma[i] is None: continue
-        volx=v[i]/vsma[i]
-        if volx<1.2: continue
-        obv10=obv[i]-obv[i-10]
-        # hard veto hanya kalau OBV melawan KERAS (>3x avg vol dalam satuan volume)
-        hard_against_s = obv10 > 3*avgv[i]   # mau SHORT tapi buying pressure gila
-        hard_against_l = obv10 < -3*avgv[i]  # mau LONG tapi dumping gila
-        # trigger 1: stoch_rsi belok
-        turn_s = b>80 and a<b-3
-        turn_l = b<20 and a>b+3
-        # trigger 2: RSI(6) belok dari ekstrem (layar user)
-        x6=r6[i]; w6=r6[i-1] if i>=1 else None
-        turn6_s = (w6 is not None and w6>80 and x6<w6-5)
-        turn6_l = (w6 is not None and w6<20 and x6>w6+5)
-        # trigger 3: breakout volume
-        body=abs(c[i]-o[i])/rng
-        brk_s = volx>2.5 and body>0.6 and c[i]<o[i]
-        brk_l = volx>2.5 and body>0.6 and c[i]>o[i]
-        # P12 ANTI-PUCUK GUARD: breakout LONG dilarang kalau RSI(6) sudah lebay (>85) = beli di pucuk
-        # (RUNE 10:00 WIB: candle hijau besar volx 3.64 → LONG, padahal RSI6 97 → langsung dibanting).
-        # Mirror: breakout SHORT dilarang kalau RSI(6) sudah botek (<15) = jual di lembah.
-        brk_l = brk_l and x6<=85
-        brk_s = brk_s and x6>=15
-        if (turn_s or brk_s or turn6_s) and not hard_against_s:
-            sigs.append((i,'S','A' if volx>=1.5 else 'B'))
-        elif (turn_l or brk_l or turn6_l) and not hard_against_l:
-            sigs.append((i,'L','A' if volx>=1.5 else 'B'))
-    return sigs
-
-def _stoch_from_rsi(rs, window=14):
-    out=[None]*len(rs)
-    for i in range(window,len(rs)):
-        w=[x for x in rs[i-window+1:i+1] if x is not None]
-        if len(w)<window: continue
-        hi,lo=max(w),min(w)
-        out[i]=100*(rs[i]-lo)/(hi-lo) if hi>lo else 50.0
-    return out
 
 def build_htf_maps(sym, k5_len):
-    """EMA20 dari 15m & 1h, dipetakan ke timeline 5m (backtest)."""
+    """EMA20+EMA50 dari 15m & struktur 1h + vol_x_1h, dipetakan ke timeline 5m.
+    Return {'15m': {ts: (ema20, ema50)}, '1h': {ts: (ema20, ema50, volx)}, '1h_struct': str}.
+    CATATAN: ts = OPEN time bar (ms). Lookup 5m->15m WAJIB forward-fill (align_htf),
+    karena ts 5m cuma match 1/3 dgn ts 15m (pecahan 15 menit)."""
     import importlib.util
-    spec=importlib.util.spec_from_file_location('vg',os.path.join(os.path.dirname(os.path.abspath(__file__)),'v15_grade.py'))
-    vg=importlib.util.module_from_spec(spec); spec.loader.exec_module(vg)
-    maps={}
-    for tf,cnt in (('15m',1000),('1h',500)):
+    spec = importlib.util.spec_from_file_location(
+        'vg', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'v15_grade.py'))
+    vg = importlib.util.module_from_spec(spec); spec.loader.exec_module(vg)
+    maps = {'15m': {}, '1h': {}, '1h_struct': 'RANGING'}
+    kh1h = None
+    for tf in ('15m', '1h'):
+        cnt = 1000 if tf == '15m' else 500
         try:
-            kh=vg.fetch_hist_klines(sym,tf,cnt)
-            c=[float(x[4]) for x in kh]
-            e=ema_series(c,20)
-            maps[tf]={int(x[0]):e[j] for j,x in enumerate(kh)}
+            kh = vg.fetch_hist_klines(sym, tf, cnt)
+            if tf == '1h': kh1h = kh
+            c = [float(x[4]) for x in kh]
+            e20, e50 = ema_series(c, 20), ema_series(c, 50)
+            if tf == '15m':
+                maps[tf] = {int(x[0]): (e20[j], e50[j]) for j, x in enumerate(kh)}
+            else:
+                v = [float(x[5]) for x in kh]
+                out = {}
+                for j, x in enumerate(kh):
+                    vma = (sum(v[j-20:j]) / 20) if j >= 20 and sum(v[j-20:j]) else None
+                    volx = round(v[j] / vma, 2) if vma else None
+                    out[int(x[0])] = (e20[j], e50[j], volx)
+                maps[tf] = out
         except Exception:
-            maps[tf]={}
+            maps[tf] = {}
+    # struktur 1h: trend kontinu / ranging / ekstrem (dump panik / pump euforia)
+    try:
+        kh = kh1h or vg.fetch_hist_klines(sym, '1h', 60)
+        o = [float(x[1]) for x in kh]; c = [float(x[4]) for x in kh]
+        e20 = ema_series(c, 20); e50 = ema_series(c, 50)
+        if c[-1] > e20[-1] > e50[-1]: maps['1h_struct'] = 'BULLISH_CONTINUATION'
+        elif c[-1] < e20[-1] < e50[-1]: maps['1h_struct'] = 'BEARISH_CONTINUATION'
+        # ekstrem: 3 candle 1h terakhir body besar searah (>60% range masing2) + lari jauh dari EMA20
+        def _runs(dirc):
+            n = 0
+            for j in range(len(kh) - 3, len(kh)):
+                rng = kh[j][2] - kh[j][3]
+                if rng <= 0: continue
+                body = (c[j] - o[j]) / rng
+                if (dirc > 0 and body > 0.6) or (dirc < 0 and body < -0.6): n += 1
+            return n == 3
+        if _runs(-1) and c[-1] < e20[-1] * 0.995: maps['1h_struct'] = 'BEARISH_EXTREME_DUMP'
+        elif _runs(1) and c[-1] > e20[-1] * 1.005: maps['1h_struct'] = 'BULLISH_EXTREME_PUMP'
+    except Exception:
+        pass
     return maps
+
+
+def align_htf(kts, m):
+    """Forward-fill map HTF ke timeline 5m: utk tiap 5m ts ambil nilai bar HTF terakhir
+    dgn open-ts <= kts. kts & keys(m) harus urut naik. Return list(len(kts)) nilai/None."""
+    keys = sorted(m.keys())
+    out = []; j = -1; best = None
+    for t in kts:
+        while j + 1 < len(keys) and keys[j + 1] <= t:
+            j += 1; best = m[keys[j]]
+        out.append(best)
+    return out
+
+
+def gen_fade_climax(kk, rs, zz, vsma):
+    """ENGINE 1 — FADE CLIMAX (grade A sinyal konter pucuk/lembah):
+    LONG  : RSI6 < 20 AND z < -1.5 AND wick bawah >= 40% range
+    SHORT : RSI6 > 80 AND z > +1.5 AND wick atas >= 40% range
+    Grade A = tambahan vol climax (vol_x > 1.5)."""
+    sigs = []
+    o = [r[1] for r in kk]; h = [r[2] for r in kk]; l = [r[3] for r in kk]
+    c = [r[4] for r in kk]; v = [r[5] for r in kk]
+    for i in range(210, len(c) - 2):
+        r = rs[i]; z = zz[i]
+        if r is None or z is None: continue
+        rng = h[i] - l[i]
+        if rng <= 0: continue
+        wick_lo = (min(o[i], c[i]) - l[i]) / rng
+        wick_hi = (h[i] - max(o[i], c[i])) / rng
+        volx = v[i] / vsma[i] if vsma[i] else 1
+        if r < 20 and z < -1.5 and wick_lo >= 0.40:
+            sigs.append((i, 'L', 'A' if volx > 1.5 else 'B'))
+        elif r > 80 and z > 1.5 and wick_hi >= 0.40:
+            sigs.append((i, 'S', 'A' if volx > 1.5 else 'B'))
+    return sigs
+
+
+def gen_scalp_momentum(kk, rs, vsma):
+    """ENGINE 2 — SCALP HIGH-MOMENTUM (agresif di pasar aktif):
+    Trigger tunggal: vol_x >= 1.5 + breakout body > 60% searah.
+    Guard P12: BLOKIR LONG jika RSI6 > 85; BLOKIR SHORT jika RSI6 < 15."""
+    sigs = []
+    o = [r[1] for r in kk]; h = [r[2] for r in kk]; l = [r[3] for r in kk]
+    c = [r[4] for r in kk]; v = [r[5] for r in kk]
+    for i in range(210, len(c) - 2):
+        rng = h[i] - l[i]
+        if rng <= 0: continue
+        volx = v[i] / vsma[i] if vsma[i] else 0
+        if volx < 1.5: continue
+        body = abs(c[i] - o[i]) / rng
+        if body <= 0.60: continue
+        x6 = rs[i]
+        if c[i] > o[i]:
+            if x6 is not None and x6 <= 85:   # P12 anti-pucuk
+                sigs.append((i, 'L', 'A' if volx >= 2.0 else 'B'))
+        elif c[i] < o[i]:
+            if x6 is not None and x6 >= 15:   # P12 mirror anti-lembah
+                sigs.append((i, 'S', 'A' if volx >= 2.0 else 'B'))
+    return sigs
+
+
+def gen_trend_pullback(kk, rs, vsma, htf15):
+    """ENGINE 3 — TREND PULLBACK (ikut arus institusi):
+    Harga 5m retrace menyentuh EMA20(15m) lalu pantul searah tren dgn vol_x > 1.0.
+    Arah wajib searah cross EMA20/EMA50 (15m)."""
+    sigs = []
+    o = [r[1] for r in kk]; h = [r[2] for r in kk]; l = [r[3] for r in kk]
+    c = [r[4] for r in kk]; v = [r[5] for r in kk]
+    for i in range(210, len(c) - 2):
+        m = htf15[i] if i < len(htf15) else None
+        if m is None: continue
+        e20, e50 = m[0], m[1]  # tuple (ema20, ema50[, volx]) hasil align_htf
+        rng = h[i] - l[i]
+        if rng <= 0: continue
+        volx = v[i] / vsma[i] if vsma[i] else 0
+        # BULLISH: EMA20 > EMA50, harga sentuh EMA20, close pantul naik
+        if e20 > e50:
+            touch = l[i] <= e20 * 1.001
+            bounce = c[i] > o[i] and c[i] > e20
+            if touch and bounce and volx > 1.0:
+                sigs.append((i, 'L', 'A' if volx > 1.5 else 'B'))
+        # BEARISH: EMA20 < EMA50, harga sentuh EMA20, close pantul turun
+        elif e20 < e50:
+            touch = h[i] >= e20 * 0.999
+            bounce = c[i] < o[i] and c[i] < e20
+            if touch and bounce and volx > 1.0:
+                sigs.append((i, 'S', 'A' if volx > 1.5 else 'B'))
+    return sigs
+
+
+def gen_hybrid(kk, rs, zz, vsma, htf15, htf1h_struct, extra_engines=None, cek_1h=True):
+    """KURIR v7.0: 3 engine + HIGHER TF FILTER (Anti-Trap).
+    - Sinyal LONG 5m HANYA jika EMA20(15m) > EMA50(15m) DAN 1h bukan BEARISH ekstrem
+      (kecuali FADE CLIMAX — fade climax dikecualikan sesuai spec).
+    - Sinyal SHORT 5m HANYA jika EMA20(15m) < EMA50(15m) DAN 1h bukan BULLISH ekstrem
+      (kecuali FADE CLIMAX).
+    htf15: list per-bar 15m (hasil align_htf, forward-fill) atau None; htf1h_struct: string struktur 1h
+    (cek 1h dari cek_1h, default True). Output: (idx, side, grade, src); src in ('fade','scalp','trend')."""
+    fade = [(s[0], s[1], s[2], 'fade') for s in gen_fade_climax(kk, rs, zz, vsma)]
+    scalp = [(s[0], s[1], s[2], 'scalp') for s in gen_scalp_momentum(kk, rs, vsma)]
+    trend = [(s[0], s[1], s[2], 'trend') for s in gen_trend_pullback(kk, rs, vsma, htf15)]
+    allsigs = fade + scalp + trend
+    # ============ HIGHER TF FILTER (Anti-Trap, WAJIB) ============
+    # htf15 = list hasil align_htf (forward-filled): nilai 15m terakhir per bar 5m.
+    # Data HTF hilang (None) = FAIL-CLOSED utk scalp/trend (mandat user: DILARANG
+    # produksi sinyal tanpa validasi HTF); fade climax dikecualikan by design.
+    by_bar = {}
+    for s in allsigs:
+        i, side, grade, src = s
+        ok = True
+        if src != 'fade':   # fade climax dikecualikan dari filter (spec v7.0)
+            m = htf15[i] if i < len(htf15) else None
+            if m is None:
+                ok = False          # fail-closed: gak bisa validasi = gak boleh tembak
+            else:
+                e20, e50 = m
+                if side == 'L' and not (e20 > e50): ok = False
+                if side == 'S' and not (e20 < e50): ok = False
+            if cek_1h:
+                st = str(htf1h_struct)
+                if side == 'L' and 'BEARISH_EXTREME' in st: ok = False
+                if side == 'S' and 'BULLISH_EXTREME' in st: ok = False
+        if not ok: continue
+        by_bar.setdefault(i, []).append((side, grade, src))
+    out = []
+    for i in sorted(by_bar):
+        ss = by_bar[i]
+        sides = {s[0] for s in ss}
+        if len(sides) > 1: continue        # arah bentrok di bar sama = kabut, buang
+        grade = 'A' if (len(ss) > 1 or any(s[1] == 'A' for s in ss)) else 'B'
+        out.append((i, ss[0][0], grade, ss[0][2]))
+    return out

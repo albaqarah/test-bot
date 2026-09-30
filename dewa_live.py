@@ -1,27 +1,15 @@
 #!/usr/bin/env python3
 """
-dewa_live.py — BOT LIVE FINAL (dry-run mode default: eksekusi virtual).
-Pipeline lengkap: Data -> Kurir matematika -> Grade A/B -> LLM bos (skill dewa)
--> Risk gate (max 5 posisi global) -> Eksekusi virtual -> Janitor SL/TP.
-
-Struktur = persis breakdown yang sudah di-review user:
-1. Data      : Binance klines 5m/1h + funding; TV multi-TF via tv_bridge.js (best effort)
-2. Kurir     : reversion_bot.gen_signals (RSI+z-score+wick+volume, Wilder RSI)
-3. Grade     : A (climax+wick ekstrem) / B (inti) — C tidak pernah disetor
-4. Bos       : jev (decisions API, typed) — FULL JEV NO-FALLBACK (P35)
-5. Risk      : order_guard.MAX_GLOBAL_POSITIONS=5, 1 posisi/pair
-6. Eksekusi  : entry open candle berikutnya, margin $2, lev 10x,
-               SL max(0.35%,0.4%), TP 3R, BE-shift +0.1% -> +0.06%, max hold 480 bar
-7. Janitor   : verifikasi SL/TP tiap 5s (di dry run: logika yang sama, virtual)
-8. Log       : dewa_live_log.jsonl (tiap keputusan) + dewa_live_state.json (posisi terbuka)
-               Cron harian baca log ini untuk laporan.
+dewa_live.py — BOT LIVE FINAL v7.0 (dry-run mode default: eksekusi virtual).
+Pipeline v7.0: Data -> KURIR v7 (3 engine preset + HIGHER TF FILTER) -> payload JSON
+-> BOS jev persona v7.0 (pipeline P1-P8, tanpa rubric) -> Risk gate (max 5 posisi)
+-> Eksekusi virtual (SL/TP varian + clamp) -> Janitor SL/TP + trail-lock P10b.
 
 Usage: python3 dewa_live.py --pairs ALL --once   (1 iterasi, untuk cron)
        python3 dewa_live.py --pairs ALL          (loop terus)
        python3 dewa_live.py --live               (EKSEKUSI BENERAN — butuh API key, default OFF)
 """
-import importlib.util, json, os, sys, time, argparse, subprocess, urllib.request
-P31a_BATTERY_ON=False  # P31a: OFF = persona jev v3.5 murni (rollback strategi 25 Sep)
+import importlib.util, json, os, sys, time, argparse, urllib.request
 from datetime import datetime, timezone
 
 def _load_env(path=None):
@@ -41,7 +29,7 @@ _load_env()
 spec=importlib.util.spec_from_file_location('vg',os.path.join(os.path.dirname(os.path.abspath(__file__)),'v15_grade.py'))
 vg=importlib.util.module_from_spec(spec); spec.loader.exec_module(vg)
 import reversion_bot as rb
-import dewa_skill as ds  # P35: dipakai build_extras/build_briefing/enrich_briefing (kurir) — BUKAN bos
+import dewa_skill as ds  # v7.0: build_payload_v7 (kontrak JSON bos) + btc_bias (macro)
 import order_guard as og
 import tg_notify as tg
 import order_cleanup as oc
@@ -62,16 +50,13 @@ MARGIN=_cfg('MARGIN_USD',2.0)/100.0     # env = margin USD beneran ($2 = $2); in
 SL_PCT=_cfg('SL_PCT',0.004)             # SL = % dari harga entry
 TP_RR_TREND=_cfg('TP_RR_TREND',3.0)     # RR saat regime TREND_UP/DOWN
 TP_RR_CHOP=_cfg('TP_RR_CHOP',2.0)       # RR saat regime RANGE (chop sniper)
-BE_TRIG=_cfg('BE_TRIG',0.0010)          # (mode TRAIL=off) shift BE kalau profit >= ini
-BE_OFF=_cfg('BE_OFF',0.0006)            # (mode TRAIL=off) BE = entry +/- ini
 TRAIL_ACT=_cfg('TRAIL_ACT',0.003)       # P10b: mulai ngunci profit saat mv >= ini
 TRAIL_DIST=_cfg('TRAIL_DIST',0.002)     # P10b: SL mengunci sejauh ini di belakang ekstrem harga (trailing)
-TRAIL=str(os.environ.get('TRAIL','on')).split('#',1)[0].strip().lower() in ('on','1','true','yes')  # P10b toggle (rollback: off)
+TRAIL=str(os.environ.get('TRAIL','on')).split('#',1)[0].strip().lower() in ('on','1','true','yes')  # P10b toggle
 MAXHOLD=_cfg('MAXHOLD_TREND',480,int)   # max hold bar 5m utk trend (480=40 jam)
 MAXHOLD_CHOP=_cfg('MAXHOLD_CHOP',96,int)# max hold utk chop (96=8 jam)
 COOLDOWN_MIN=_cfg('COOLDOWN_MIN',30,int)# re-entry cooldown per pair (menit)
 SCAN_SEC=_cfg('SCAN_SEC',60,int)        # jeda antar scan (detik) saat idle
-P6_LOOSE=os.environ.get('P6_LOOSE','off').strip().lower() in ('on','1','true','yes')  # P6 fade longgar (rollback: off)
 COOLDOWN_MS=COOLDOWN_MIN*60*1000
 LIVE=os.environ.get('MODE','dry').strip().lower()=='live'   # MODE=live di .env -> eksekusi nyata
 
@@ -131,20 +116,9 @@ def fund_last(sym):
         return float(d[0]['fundingRate'])
     except Exception: return 0.0
 
-def tv_ta(sym):
-    """TV multi-TF best-effort; None kalau down."""
-    try:
-        TV_SYMBOL_MAP={"XAUUSDT":"OANDA:XAUUSD","XAGUSDT":"OANDA:XAGUSD",
-                       "XPTUSDT":"OANDA:XPTUSD","PAXGUSDT":"OANDA:XAUUSD"}
-        sym2=TV_SYMBOL_MAP.get(sym, f"BINANCE:{sym}")
-        out=subprocess.run(["node",os.path.join(os.path.dirname(os.path.abspath(__file__)),"tv_bridge.js"),sym2],
-                           capture_output=True,text=True,timeout=40)
-        d=json.loads(out.stdout)
-        return {tf:(d[tf]['ta'] if d.get(tf) else None) for tf in ('tf5','tf15','tf60')}
-    except Exception:
-        return None
+# v7.0: tv_ta/TradingView bridge DIHAPUS — HTF 15m/1h sekarang dari Binance klines langsung (kurir v7 build_htf_maps)
 
-BOS_PROVIDER='jev'  # P35: FULL JEV — satu bos, TANPA fallback
+# v7.0: FULL JEV NO-FALLBACK (P35) — bos = jev_bridge.call_jev, persona v7.0; tanpa model kedua
 
 def llm_call(brief):
     # P35 FULL JEV NO-FALLBACK (komando user 29 Sep): model cadangan DIHAPUS TOTAL.
@@ -266,11 +240,7 @@ def manage_open(st, k_cache):
                 elif side=='SHORT' and mv_bot>=TRAIL_ACT:
                     new_sl=p['lo_px']*(1+TRAIL_DIST)
                     if new_sl<p['sl']: p['sl']=new_sl; p['be_moved']=True
-            else:
-                # mode BE lama (rollback): geser ke entry+fee — pakai ekstrem SEJAK posisi lahir (P10a)
-                if not p['be_moved'] and now-p['open_ts']>=300000:
-                    if side=='LONG' and p['hi_px']>=p['entry']*(1+BE_TRIG): p['be_moved']=True; p['sl']=p['entry']*(1+BE_OFF)
-                    if side=='SHORT' and p['lo_px']<=p['entry']*(1-BE_TRIG): p['be_moved']=True; p['sl']=p['entry']*(1+BE_OFF)
+            # v7.0: mode BE lama (rollback P10) DIHAPUS — trail-lock P10b satu-satunya pengunci profit
             # SL/TP hit detection pakai bar FORMING (live) — SL/TP nyata kena realtime itu benar
             hit=None; exit_px=None
             def _lock_label(_sl):
@@ -346,15 +316,7 @@ def last_reason(sym, st):
     except Exception: pass
     return ''
 
-def _p38_dry_pass(vcls, wh):
-    """P38a koreksi skip_dry: True = tetap SKIP. Kandidat 'kering' DILEPAS kalau wick-hint
-    bermutu (dir LONG/SHORT, strength>=55 — wick_hunter gratis host-side) karena reversal
-    terbaik justru lahir saat volume kering (konteks ekstrem). Bos yang menilai, bukan kurir."""
-    try:
-        s=wh.get('strength'); s=int(s) if s is not None else -1
-    except Exception: s=-1
-    al=(wh.get('dir') in ('LONG','SHORT'))
-    return (vcls=='kering') and not (al and s>=55)
+# v7.0: gate _p38_dry_pass DIHAPUS — filter mutu sekarang di SUMBER (kurir v7 3 engine + HTF), bos menilai semua lolosan
 
 def _p39_trim(done, cap=2000):
     """P39 BUGFIX (ACC 30 Sep): trim done by bar_ts TERBARU.
@@ -398,63 +360,31 @@ def _iterate_inner(once=False):
             zz=rb.zscore(c)
             vsma=[0.0]*len(v)
             for i in range(20,len(v)): vsma[i]=sum(v[i-20:i])/20
-            # mode HYBRID: fade + trend pullback (LLM gate tetap)
+            # ===== KURIR v7.0: 3 engine preset + HIGHER TF FILTER (Anti-Trap) =====
             maps=hr.build_htf_maps(sym,len(kk))
-            htf15=[maps['15m'].get(kk[i][0]) for i in range(len(kk))]
-            htf60=[maps['1h'].get(kk[i][0]) for i in range(len(kk))]
-            sigs=hr.gen_hybrid(kk,rs,zz,vsma,htf15,htf60,
-                               extra_engines='all' if P6_LOOSE else 'scalp')
+            kts=[r[0] for r in kk]
+            htf15=hr.align_htf(kts, maps['15m'])   # forward-fill: bar 15m terakhir utk tiap 5m
+            sigs=hr.gen_hybrid(kk,rs,zz,vsma,htf15,maps['1h_struct'])
             # dedup via done-set (sym,bar_ts,side) — di-load sekali di atas, BUKAN per-pair reset
             for (si,side,grade,src) in sigs:
                 i=si
-                # FRESHNESS: sinyal scalp harus muda (<=4 bar = 20 mnt) — sinyal tua = bangkai,
-                # bikin backlog LLM 30-45 dtk/keputusan numpuk (scalper gak nunggu 90 mnt)
-                if src=='scalp' and i<len(kk)-5: continue
+                # FRESHNESS: sinyal harus muda (<=4 bar = 20 mnt) — sinyal tua = bangkai
+                if i<len(kk)-5: continue
                 if i>=len(kk)-24:
                     key=(sym,kk[i][0],side)
                     if key in done: continue
                     if int(time.time()*1000)<st.get('reject_cd',{}).get(sym+':'+side,0): continue
                     if sym in st['open']: continue
                     if int(time.time()*1000)<st.get('cooldown',{}).get(sym,0): continue
-                    o,h,l,cl=(kk[i][j] for j in (1,2,3,4))
-                    rng=h-l
-                    imb=((min(o,cl)-l)-(h-max(o,cl)))/rng if rng>0 else 0
-                    score={'imb':round(imb,3),'vol_x':round(v[i]/vsma[i],2),
-                           'z':round(zz[i],2),'rsi':round(rs[i],1)}
                     reg=rb.regime_1h(sym)
                     fund=fund_last(sym)
-                    tvv=tv_ta(sym) if not once else None
-                    try: extras=ds.build_extras(sym,kk,rs)
-                    except Exception: extras=None
-                    brief=ds.build_briefing(sym,grade,side,score,reg,fund,tvv,True,extras=extras,source=src)
-                    # P13 VISION: suntik chart RSI6 + momentum_class + bar detail ke briefing bos
-                    try: brief=ds.enrich_briefing(brief,kk,rs)
-                    except Exception: pass
-                    # P16-C: RSI6 REALTIME — bos harus menilai kondisi yang SAMA dgn layar user.
-                    # Bar closed telad (ARB: kurir lihat RSI6 83.4, user lihat 95.7). Ganti close terakhir
-                    # dgn harga live → RSI6 sintetis "sekarang".
-                    try:
-                        _px=live_px(sym)
-                        if _px:
-                            _c=[float(r[4]) for r in kk[-20:]]
-                            _c[-1]=_px
-                            _r6rt=hr.rsi6(_c)[-1]
-                            brief.setdefault('vision',{})['rsi6_now']=round(_r6rt,1)
-                            brief['vision']['rsi6_source']='realtime'
-                    except Exception: pass
-                    # P20: SMC + MONEY-FLOW ENGINE — MSS/FVG/liquidity + BTC.D (crypto) / DXY (TradFi)
+                    brief=ds.build_payload_v7(sym,kk,side,grade,src,reg,fund,maps)
+                    # v7.0 PAYLOAD KONTRAK (user-spec): macro + smc + metrics + market + slSuggest.
+                    # P16-C RSI6 realtime (sama dgn layar user) + SMC + snapshot — semua best-effort.
                     try:
                         import smc_engine as _smc
-                        _smcd=_smc.enrich(sym, brief.get('btc_bias'))
-                        # P31a ROLLBACK STRATEGI: battery & hint OFF — persona jev kembali v3.5 murni (gaya 25 Sep).
-                        # Flip P31a_BATTERY_ON=True utk aktifkan lagi (engine utuh di smc_engine).
-                        if P31a_BATTERY_ON:
-                            _smcd['momentumBattery']=_smc.momentum_battery(kk, brief.get('side'))
-                            _smcd.update(_smc.reversal_hint(kk))
-                        brief.update(_smcd)
+                        brief.update(_smc.enrich(sym, ds.btc_bias()['bias']))
                     except Exception: pass
-                    # P32 MARKET SNAPSHOT: 10 skill pasar + WICK-HUNTER (host-side, gratis).
-                    # Gagal = field kosong, pipeline jalan normal (never raise).
                     try:
                         import market_snapshot as _mkt
                         _mkt.enrich_market(brief, sym, kk, rs)
@@ -464,40 +394,28 @@ def _iterate_inner(once=False):
                                  'pattern':brief['wickHint'].get('pattern'),
                                  'strength':brief['wickHint'].get('strength')})
                     except Exception: pass
-                    # P13 KURIR GATE (P38a RECALIBRASI): momen 'kering' masih difilter SEBELUM bos
-                    # (hemat API + anti sinyal kopong) TAPI kandidat dgn wick-hint bermutu (>=55,
-                    # wick_hunter gratis host-side) DILEPAS — reversal terbaik sering LAHIR pas volume
-                    # kering (konteks extreme), itu kerjaan BOS bukan kurir. Kasus NEAR 30 Sep 01:35 WIB:
-                    # hint SHORT str 64 dibunuh 100% oleh gate ini jam-jam pucuk, bos tak pernah ditanya.
-                    vcls=str(brief.get('vision',{}).get('momentum_class',''))
-                    _wh38=brief.get('wickHint') or {}
-                    if _p38_dry_pass(vcls, _wh38):
-                        log({'event':'skip_dry_momentum','symbol':sym,'side':side,'vol_x':score.get('vol_x'),
-                             'hint_str':_wh38.get('strength')})
-                        continue
-                    # P14 TRADFI GATE + P23 WINDOW: blok entry 3 jam sebelum break/close (anti volume kopong + irit API bos)
+                    try:
+                        _px=live_px(sym)
+                        if _px:
+                            brief.setdefault('metrics',{})['rsi6Realtime']=round(
+                                rb.rsi6([float(r[4]) for r in kk[-19:]]+[[0,0,0,0,_px,0]])[-1],1)
+                    except Exception: pass
+                    # P14 TRADFI GATE: blok entry 3 jam sebelum break/close (anti volume kopong)
                     if sym in tfs.TRADFI:
                         _eb,_ff,_why=tfs.tradfi_window()
                         if _eb:
                             log({'event':'skip_tradfi_window','symbol':sym,'side':side,'window':_why})
                             continue
-                    # P27: battery & upgrade grade B -> A kalau momentum battery FULL + MSS searah
-                    _bat=str((brief.get('momentumBattery') or {}).get('battery','MID'))
-                    _mss=str(brief.get('mss',''))
-                    _mss_ok=(side=='L' and 'BULL' in _mss) or (side=='S' and 'BEAR' in _mss)
-                    if P31a_BATTERY_ON and grade=='B' and _bat=='FULL' and _mss_ok:
-                        grade='A'
-                        log({'event':'grade_upgrade','symbol':sym,'side':side,'why':'battery FULL + MSS searah'})
                     candidates.append({'sym':sym,'i':i,'side':side,'grade':grade,'key':key,'src':src,
                                        'brief':brief,'entry_next':float(kk[i+1][1]) if i+1<len(kk) else None,
-                                       'regime':reg,'mclass':vcls,'battery':_bat})
+                                       'regime':reg})
                     done.add(key)
         except Exception as e:
             log({'event':'err','symbol':sym,'msg':str(e)[:80]})
         st.setdefault('last_seen',{})[sym]=kk[-1][0]
     st['done']=_p39_trim(done)  # persist dedup (P39: trim by bar_ts, cap 2000)
     # 3) bos putuskan (batch, urut grade A dulu)
-    candidates.sort(key=lambda x:(x['grade']!='A', x.get('battery')!='FULL', x['sym']))
+    candidates.sort(key=lambda x:(x['grade']!='A', x['sym']))
     confirmed=0
     # GATE HEMAT-API (user): posisi penuh 5/5 -> kurir DILARANG nanya bos LLM. Notif sekali per kejadian.
     if candidates and n_open>=og.MAX_GLOBAL_POSITIONS:
@@ -512,20 +430,8 @@ def _iterate_inner(once=False):
             done.discard(cd['key'])  # jangan dikunci done — kalau slot buka lagi, sinyal bisa dinilai ulang
             continue
         d=llm_call(cd['brief'])
-        # P21a: audit trail P1-P8 faktual (bukan LLM) — jev saja
-        try:
-            if BOS_PROVIDER=='jev':
-                import smc_engine as _smca
-                log(_smca.pipeline_log(cd['brief'], d, d.get('conf')))
-        except Exception: pass
-        # P17: MIN_CONF gate — conf skrg = p(total CONFIRMED*). Sinyal di bawah ambang = REJECT
-        # (kandidat TIDAK dikunci done — kalau bos nanti lebih yakin di iterasi lain, boleh dinilai ulang)
-        try: _minconf=float(os.environ.get('MIN_CONF','55'))
-        except Exception: _minconf=55.0
-        if d.get('decision')=='CONFIRMED' and float(d.get('confidence',0))<_minconf:
-            d={'decision':'REJECT','confidence':d.get('confidence'),
-               'reason':str(d.get('reason',''))+f" [MIN_CONF gate: {d.get('confidence')} < {_minconf}]",
-               'key_factor':d.get('key_factor')}
+        # v7.0: fence host MIN_CONF (P17) + echo rubric P21a DIHAPUS — keputusan = murni bos v7
+        # (P8 internal <0.55 = REJECT; fence dobel justru bikin "penolak pasif" yang di protes user)
         # P9 NORMALISASI SIDE: kurir ngirim 'L'/'S', seluruh jalur mutasi pakai 'LONG'/'SHORT'.
         # 'L' != 'LONG' bikin SL/TP kebalik (bug BCH 21:51 WIB: LONG kena SL palsu di profit)
         _side=cd['side']
@@ -549,24 +455,22 @@ def _iterate_inner(once=False):
         # P30 REJECT-COOLDOWN: REJECT = jangan tanya bos utk (sym,side) yg sama dlm 15 menit — hemat API jev
         # (kasus P29: ATOM SHORT ditanya 40x/2jam = 44% budget jev terbuang utk jawaban sama)
         if d.get('decision')!='CONFIRMED': continue
-        # P16-B: WICK-EXTREME FLIP — bos dilarang ACC searah wick ekstrem. Kalau sinyal LONG datang
-        # pas RSI6 realtime > 90 (pucuk), bos membalik jadi SHORT (peluang valid fade). Mirror SHORT < 10 → LONG.
-        # (kasus ARB 21:35 WIB: breakout LONG di RSI6 83.4 → nyentuh 95.7 saat entry → langsung dibanting -0.8%)
-        _v=(cd.get('brief') or {}).get('vision',{}) if isinstance(cd.get('brief'),dict) else {}
-        _r6rt=_v.get('rsi6_now'); _mcl=_v.get('momentum_class','')
+        # P16-B WICK-EXTREME FLIP (dipertahankan v7.0 — bukti ARB/NEAR): sinyal ACC searah wick
+        # ekstrem DIBALIK (fade climax sah). RSI6 realtime = metrics.rsi6Realtime (kontrak v7).
+        _r6rt=(cd.get('brief') or {}).get('metrics',{}).get('rsi6Realtime')
         _flipped=False
         try:
             _r6f=float(_r6rt) if _r6rt is not None else None
         except Exception: _r6f=None
         _old_side=cd['side']
-        if _r6f is not None and _old_side=='LONG' and (_r6f>90 or (_mcl=='wick_extreme' and _r6f>80)):
+        if _r6f is not None and _old_side=='LONG' and _r6f>90:
             cd['side']='SHORT'; _flipped=True
-        elif _r6f is not None and _old_side=='SHORT' and (_r6f<10 or (_mcl=='wick_extreme' and _r6f<20)):
+        elif _r6f is not None and _old_side=='SHORT' and _r6f<10:
             cd['side']='LONG'; _flipped=True
         if _flipped:
             reason=(d.get('reason','') or '')+f' [WICK-FLIP: sinyal dibalik — RSI6 realtime {_r6f} ekstrem, arah lama searah wick]'
             d['reason']=reason
-            log({'event':'wick_flip','symbol':cd['sym'],'rsi6':_r6f,'mclass':_mcl,
+            log({'event':'wick_flip','symbol':cd['sym'],'rsi6':_r6f,
                  'old_side':_old_side,'new_side':cd['side']})
         if n_open+confirmed>=og.MAX_GLOBAL_POSITIONS:
             log({'event':'skip_full','symbol':cd['sym']}); continue
@@ -672,7 +576,6 @@ def _iterate_inner(once=False):
                              'conf':d.get('confidence'),'reason':reason,
                              'mf':(cd.get('brief') or {}).get('moneyFlow') or (cd.get('brief') or {}).get('tradfiMoneyFlow'),
                              'mss':(cd.get('brief') or {}).get('mss'),
-'battery':((cd.get('brief') or {}).get('momentumBattery') or {}).get('battery'),
                              'fvg':(cd.get('brief') or {}).get('fvgStatus'),
                              'entryLoc':(cd.get('brief') or {}).get('entryLoc')})+'\n🟢 <b>MODE LIVE</b> — order beneran terkirim')
                 confirmed+=1
@@ -688,19 +591,17 @@ def _iterate_inner(once=False):
         log({'event':'open','symbol':cd['sym'],'side':side,'entry':entry,'sl':sl,'tp':tp,
              'conf':d.get('confidence'),'grade':cd['grade'],'reason':reason,
              'entryLoc':(cd.get('brief') or {}).get('entryLoc')})
-        _v=(cd.get('brief') or {}).get('vision',{}) if isinstance(cd.get('brief'),dict) else {}
+        _br=cd.get('brief') or {}
         tg.send(tg.fmt_open({'symbol':cd['sym'],'side':side,'grade':cd['grade'],
                              'entry':entry,'sl':sl,'tp':tp,'tp_rr':tp_rr,
                              'qty':round(20.0/entry,6),
                              'conf':d.get('confidence'),'reason':reason,
                              'variant':str(d.get('variant','')).upper(),
-                             'mf':(cd.get('brief') or {}).get('moneyFlow') or (cd.get('brief') or {}).get('tradfiMoneyFlow'),
-                             'mss':(cd.get('brief') or {}).get('mss'),
-'battery':((cd.get('brief') or {}).get('momentumBattery') or {}).get('battery'),
-                             'fvg':(cd.get('brief') or {}).get('fvgStatus'),
-                             'regime':regime,'mclass':_v.get('momentum_class'),
-                             'rsi6':_v.get('rsi6_now'),
-                             'entryLoc':(cd.get('brief') or {}).get('entryLoc'),
+                             'mf':_br.get('moneyFlow') or _br.get('tradfiMoneyFlow'),
+                             'mss':_br.get('mss'),
+                             'fvg':_br.get('fvgStatus'),
+                             'regime':regime,'rsi6':_br.get('metrics',{}).get('rsi6Realtime'),
+                             'entryLoc':_br.get('entryLoc'),
                              'n_open':len(st['open']),'saldo':st.get('saldo',0)}))
         # save PER EVENT: kalau proses kena kill saat LLM error bertubi, keputusan gak ilang & gak diulang
         save_state(st)

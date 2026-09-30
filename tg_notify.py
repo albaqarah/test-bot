@@ -162,13 +162,13 @@ def _regime_line():
 # ---------- START / STOP / RESTART ----------
 def fmt_start(saldo, n_open=0, maxpos=5, n_pair=41):
     r=_resume24()
-    return (f"🟢 <b>BOT START · DEWA SNIPER v6.2</b>" + NL + DIV
+    return (f"🟢 <b>BOT START · TYPESAFE SNIPER v7.0</b>" + NL + DIV
         + NL + f"🧾 Mode      {_mode_line()}"
         + NL + _equity(saldo)
         + NL + "💵 Margin    $2.00/trade · notional $20.00"
         + NL + f"🎟️ Slot      {maxpos} · 1 posisi/pair · cd 30m"
         + NL + "🪙 Pair      41 (38 crypto + 3 logam + PAXG)"
-        + NL + "🎯 TP/SL     SL 1.2% · TP 4R trend / 3R chop (bos bisa override)"
+        + NL + "🎯 TP/SL     SL 0.8–1.8% (P7 bos) · TP 2.5–4R · clamp 0.3–3%"
         + NL + "🛡️ BE        TRAIL aktif: kunci +0.6% → puncak −0.3%"
         + NL + _tradfi_line()
         + NL + _bos_line()
@@ -188,8 +188,9 @@ def fmt_open(e):
     tp_pct=abs(e['tp']/e['entry']-1)*100*(1 if _long else -1)   # TP sebaliknya
     conf=e.get('conf')
     mom=""
-    if e.get('mclass') or e.get('rsi6') is not None:
-        mom=NL+f"🧭 Momentum {e.get('mclass','?')} · RSI6 {e.get('rsi6','?')}"
+    if e.get('engine') or e.get('rsi6') is not None:
+        _eng={'fade':'FADE CLIMAX','scalp':'SCALP MOMENTUM','trend':'TREND PULLBACK'}.get(str(e.get('engine','')).lower(), e.get('engine') or '?')
+        mom=NL+f"🧭 Engine {_eng} · RSI6 {e.get('rsi6','?')}"
     # P38-C: baris lokasi entry (AT-TURN/MID/CHASE) — transparansi timing ke user
     _el=e.get('entryLoc') or {}
     loc38=''
@@ -202,7 +203,6 @@ def fmt_open(e):
         if e.get('mf'): parts.append(f"🛰️ {e['mf']}")
         if e.get('mss') and e['mss']!='NONE': parts.append("MSS "+str(e['mss']).replace('MSS_','').replace('_',' '))
         if e.get('fvg') and e['fvg']!='NONE': parts.append(f"FVG {e['fvg']}")
-        if e.get('battery'): parts.append({'FULL':'🔋 BATTERY FULL','MID':'🔋 BATTERY MID','LOW':'🪫 BATTERY LOW'}.get(e['battery'], '🔋 '+e['battery']))
         if parts: smc=NL+' · '.join(parts)
     # P21b: baris pipeline P1-P8 (faktual dari sinyal, bukan LLM)
     try:

@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+"""test_v7.py — regresi TYPESAFE SNIPER v7.0 (rombak total 30 Sep 2026).
+Coverage: HTF filter (anti-trap + fail-closed), align_htf forward-fill,
+3 engine preset (threshold persis spec user), type-guard bos v7,
+payload kontrak JSON, dan static check kode-mati (anti numpuk bug)."""
+import sys, os, json, re
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import reversion_bot as rb
+import hybrid_rules as hr
+import dewa_skill as ds
+import jev_bridge as jb
+
+PASS=0; FAIL=0
+def check(name, cond, detail=''):
+    global PASS, FAIL
+    if cond: PASS+=1; print(f"  ok  {name}")
+    else: FAIL+=1; print(f" FAIL {name} {detail}")
+
+def mk_kk(spec):
+    """spec: list bar [ts,o,h,l,c,v] -> kk format pipeline."""
+    return [[int(s[0]),float(s[1]),float(s[2]),float(s[3]),float(s[4]),float(s[5])] for s in spec]
+
+def base_kk(n=300, px=100.0):
+    return [[i*300000, px, px*1.001, px*0.999, px, 10.0] for i in range(n)]
+
+# ---------- 1. align_htf forward-fill ----------
+m={1000:(1.0,2.0),1500:(3.0,4.0)}
+al=hr.align_htf([500,1000,1200,1500,1700], m)
+check('align_htf ffill', al==[None,(1.0,2.0),(1.0,2.0),(3.0,4.0),(3.0,4.0)], str(al))
+check('align_htf kosong', hr.align_htf([1,2],{})==[None,None])
+
+# ---------- 2. FADE CLIMAX threshold persis spec ----------
+# LONG: RSI6<20, z<-1.5, wick bawah>=40%  (o=99,c=92,h=99.5,l=87 -> wick=(92-87)/12.5=40%)
+kk=base_kk(300)
+for i in range(100,297): kk[i][4]=100+(0.5 if i%2 else -0.5)  # history berosilasi (z nyata)
+kk[297]=[297*300000, 99.0, 99.5, 87.0, 92.0, 60.0]
+c=[r[4] for r in kk]; v=[r[5] for r in kk]
+rs=rb.rsi6(c); zz=rb.zscore(c)
+vsma=[0.0]*len(v)
+for i in range(20,len(v)): vsma[i]=sum(v[i-20:i])/20
+fade=hr.gen_fade_climax(kk,rs,zz,vsma)
+check('fade LONG RSI6<20 z<-1.5 wick>=40%', any(s[1]=='L' for s in fade), str(fade))
+# drop sedang (RSI di band tengah, wick sah): TIDAK boleh nembak fade
+kk2=base_kk(300)
+for i in range(100,297): kk2[i][4]=100+(0.5 if i%2 else -0.5)
+kk2[297]=[297*300000, 99.0, 99.5, 93.0, 96.0, 60.0]
+c2=[r[4] for r in kk2]
+rs2=rb.rsi6(c2); zz2=rb.zscore(c2)
+check('fade drop sedang (RSI/z kurang ekstrem) ditolak', not any(s[1]=='L' for s in hr.gen_fade_climax(kk2,rs2,zz2,vsma)),
+      str(hr.gen_fade_climax(kk2,rs2,zz2,vsma)))
+# wick cuma ~27%: TIDAK boleh (o=90,c=95,l=88,h=95.5 -> wick=(90-88)/7.5=27%)
+kk3=base_kk(300)
+for i in range(100,297): kk3[i][4]=100+(0.5 if i%2 else -0.5)
+kk3[297]=[297*300000, 90.0, 95.5, 88.0, 95.0, 60.0]
+c3=[r[4] for r in kk3]
+rs3=rb.rsi6(c3); zz3=rb.zscore(c3)
+check('fade wick 27% ditolak (<40%)', not any(s[1]=='L' for s in hr.gen_fade_climax(kk3,rs3,zz3,vsma)),
+      str(hr.gen_fade_climax(kk3,rs3,zz3,vsma)))
+
+# ---------- 3. SCALP HIGH-MOMENTUM ----------
+def scalp_case(o,h,l,cx,vx,reds=0):
+    """Breakout bar di ujung; reds = jumlah bar merah sebelum breakout (jaga RSI6 <=85)."""
+    k=base_kk(300)
+    for j in range(reds):
+        k[-4-j]=[ (297-1-j)*300000, 100.5, 100.8, 99.8, 99.0, 10.0]
+    k[-3]=[297*300000,o,h,l,cx,vx]
+    cc=[r[4] for r in k]
+    rr=rb.rsi6(cc); z=rb.zscore(cc)
+    vv=[r[5] for r in k]
+    vm=[0.0]*len(vv)
+    for i in range(20,len(vv)): vm[i]=sum(vv[i-20:i])/20
+    return hr.gen_scalp_momentum(k,rr,vm)
+check('scalp volx>=1.5 body>60% LONG', any(s[1]=='L' for s in scalp_case(99.5,102.5,99.4,102.3,25.0,reds=2)))
+check('scalp volx<1.5 ditolak', not scalp_case(99.5,102.5,99.4,102.3,12.0,reds=2))
+check('scalp body<=60% ditolak', not scalp_case(99.5,103.0,98.5,101.0,25.0,reds=2))
+# P12 guard: LONG di RSI6>85 diblokir -> bikin bar naik terus sblm breakout
+k=base_kk(300)
+for i in range(280,300): k[i]=[i*300000, 100+i-280, 100.6+i-280, 99.9, 100.5+i-280, 10.0]  # naik terus
+k[-3]=[297*300000, 120.0, 124.0, 119.8, 123.6, 40.0]
+cc=[r[4] for r in k]; rr=rb.rsi6(cc)
+vv=[r[5] for r in k]; vm=[0.0]*len(vv)
+for i in range(20,len(vv)): vm[i]=sum(vv[i-20:i])/20
+check('scalp P12: RSI6 ekstrem naik -> LONG diblokir', not any(s[1]=='L' for s in hr.gen_scalp_momentum(k,rr,vm)),
+      f"rsi6={rr[-3]:.1f}")
+
+# ---------- 4. HTF FILTER (Anti-Trap) ----------
+def htf_case(src, e20, e50, struct='RANGING'):
+    """Kandidat 1 bar di ujung; src fade=climax lembah, scalp=breakout naik."""
+    k=base_kk(300)
+    if src=='fade':
+        for j in range(100,297): k[j][4]=100+(0.5 if j%2 else -0.5)
+        k[297]=[297*300000, 99.0, 99.5, 87.0, 92.0, 60.0]
+    else:
+        for j in range(2):
+            k[296-j]=[(296-j)*300000, 100.5, 100.8, 99.8, 99.0, 10.0]
+        k[297]=[297*300000, 99.5, 102.5, 99.4, 102.3, 25.0]
+    cc=[r[4] for r in k]; rr=rb.rsi6(cc); z=rb.zscore(cc)
+    vv=[r[5] for r in k]; vm=[0.0]*len(vv)
+    for i in range(20,len(vv)): vm[i]=sum(vv[i-20:i])/20
+    htf=[(e20,e50)]*len(k)
+    return hr.gen_hybrid(k,rr,z,vm,htf,struct)
+check('HTF: scalp LONG butuh EMA20>E50 15m', not htf_case('scalp',10.0,11.0), str(htf_case('scalp',10.0,11.0)))
+check('HTF: scalp LONG lolos EMA20>E50', any(s[1]=='L' and s[3]=='scalp' for s in htf_case('scalp',12.0,11.0)), str(htf_case('scalp',12.0,11.0)))
+check('HTF: 1h BEARISH_EXTREME blok LONG non-fade', not htf_case('scalp',12.0,11.0,'BEARISH_EXTREME_DUMP'))
+check('HTF: fade LONG DIKECUALIKAN dr filter', any(s[1]=='L' and s[3]=='fade' for s in htf_case('fade',10.0,11.0,'BEARISH_EXTREME_DUMP')),
+      str(htf_case('fade',10.0,11.0,'BEARISH_EXTREME_DUMP')))
+# fail-closed: data HTF None = non-fade diblok
+k=base_kk(300)
+for j in range(2):
+    k[296-j]=[(296-j)*300000, 100.5, 100.8, 99.8, 99.0, 10.0]
+k[297]=[297*300000, 99.5, 102.5, 99.4, 102.3, 25.0]
+cc=[r[4] for r in k]; rr=rb.rsi6(cc); z=rb.zscore(cc)
+vv=[r[5] for r in k]; vm=[0.0]*len(vv)
+for i in range(20,len(vv)): vm[i]=sum(vv[i-20:i])/20
+check('HTF fail-closed: data None = non-fade diblok', not any(s[1]=='L' for s in hr.gen_hybrid(k,rr,z,vm,[None]*300,'RANGING')),
+      str(hr.gen_hybrid(k,rr,z,vm,[None]*300,'RANGING')))
+
+# ---------- 5. TYPE-GUARD BOS v7 (offline, _req di-mock) ----------
+_orig=jb._req; jb.KEY='test-key-offline'
+jb._req=lambda p: {'answers':{'decision':{'choice':'CONFIRMED_NORMAL','probabilities':{'CONFIRMED_NORMAL':0.8,'REJECT':0.2},'confidence':0.8}}}
+r=jb.call_jev({'symbol':'BTCUSDT','side':'LONG'})
+check('type-guard CONFIRMED_NORMAL', r['decision']=='CONFIRMED' and r['variant']=='NORMAL', str(r))
+jb._req=lambda p: {'answers':{'decision':{'choice':'MAYBE','probabilities':{},'confidence':0.5}}}
+r=jb.call_jev({'symbol':'BTCUSDT','side':'LONG'})
+check('type-guard choice asing -> REJECT', r['decision']=='REJECT' and 'cacat' in r.get('reason',''), str(r))
+jb._req=lambda p: {'answers':{'decision':{'choice':'REJECT','probabilities':{'REJECT':0.9},'confidence':0.9}}}
+r=jb.call_jev({'symbol':'XAUUSDT','side':'SHORT'})
+check('REJECT sah dgn prob', r['decision']=='REJECT' and r['probs'].get('REJECT')==0.9, str(r))
+jb._req=_orig
+check('persona v7 verbatim', 'DILARANG KERAS' in jb.SYSTEM_IMMUNITY and 'TYPESAFE SNIPER v7.0' in jb.PERSONA_V7 and '8 LANGKAH' in jb.PERSONA_V7 and 'P8' in jb.PERSONA_V7)
+check('criteria 4 opsi', list(jb.CRITERIA)==['CONFIRMED_TIGHT','CONFIRMED_NORMAL','CONFIRMED_WIDE','REJECT'])
+
+# ---------- 6. PAYLOAD KONTRAK v7 ----------
+ds.btc_bias=lambda: {'bias':'UP','b5':'UP','b1':'UP'}
+kk=base_kk(600)
+kk[-2]=[598*300000, 99.0, 99.5, 89.0, 92.0, 60.0]
+maps={'15m':{kk[-2][0]:(1.1,1.0)},'1h':{kk[-2][0]:(1.1,1.0,1.7)},'1h_struct':'BULLISH_CONTINUATION'}
+p=ds.build_payload_v7('BTCUSDT',kk,'L','A','fade','RANGE',0.0001,maps)
+check('payload asset.class', p['asset']['class']=='CRYPTO' and p['asset']['ticker']=='BTC')
+check('payload HTF', p['higher_tf_alignment']['tf_15m_ema_cross']=='BULLISH' and p['higher_tf_alignment']['vol_x_1h']==1.7)
+check('payload macro', p['macro_matrix']['btc_bias']=='UP')
+check('payload metrics', p['metrics']['volx'] is not None and 'zScore' in p['metrics'] and 'wick_ratio_pct' in p['metrics'])
+check('payload engine+side', p['engine']=='fade' and p['side']=='LONG')
+pm=ds.build_payload_v7('XAUUSDT',kk,'S','A','fade','RANGE',0.0,maps)
+check('payload metal', pm['asset']['class']=='TRADFI_METAL' and pm['asset']['ticker']=='XAUUSD')
+
+# ---------- 7. STATIC: kode mati era lama GAK BOLEH balik ----------
+def grep(fname, *pats):
+    t=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),fname)).read()
+    t=re.sub(r'"""[\s\S]*?"""', ' ', t)   # buang docstring
+    t=re.sub(r"#.*", '', t)                   # buang komentar
+    return {p: len(re.findall(rf'\b{re.escape(p)}\b', t)) for p in pats if re.search(rf'\b{re.escape(p)}\b', t)}
+dead=grep('dewa_live.py','MIN_CONF','P6_LOOSE','momentumBattery','reversal_hint','pipeline_log','tv_ta','_p38_dry_pass','skip_dry','battery','vision','rubric','build_extras','BE_TRIG','BE_OFF')
+check('dewa_live bersih kode mati', not dead, str(dead))
+dead=grep('dewa_skill.py','build_extras','classify_momentum','enrich_briefing','obv_slope','kdj','stoch_rsi','rel_strength','spark(')
+check('dewa_skill bersih scalper pack', not dead, str(dead))
+dead=grep('hybrid_rules.py','gen_loose_fade','p6')
+check('hybrid_rules bersih P6', not dead, str(dead))
+dead=grep('smc_engine.py','momentum_battery','reversal_hint','pipeline_log')
+check('smc_engine bersih battery/hint', not dead, str(dead))
+dead=grep('reversion_bot.py','gen_signals','simulate','imb')
+check('reversion_bot tinggal primitif', not dead, str(dead))
+# RSI(6) MANDATE: gak ada RSI 14 di pipeline inti
+for f in ('hybrid_rules.py','dewa_skill.py','reversion_bot.py','dewa_live.py'):
+    t=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),f)).read()
+    check(f'RSI6-only {f}', 'rsi14' not in t and 'rsi(14' not in t.lower() and 'RSI(14' not in t)
+
+# ---------- 8. P39 TRIM (dipertahankan dari test_p39) + P35 NO-FALLBACK (dari test_p32) ----------
+check('p39 trim: cap 2000 by bar_ts', len(hr._p39_trim if hasattr(hr,'_p39_trim') else __import__('dewa_live')._p39_trim(
+    {(f'S{i}', i*1, 'L') for i in range(3000)})) == 2000)
+import dewa_live as dl
+_trim=dl._p39_trim({('A', 100, 'L'), ('B', 200, 'S'), ('C', 50, 'L')})
+check('p39 trim: keep newest, drop oldest', [k[0] for k in sorted(_trim, key=lambda x: x[1])] == ['C','A','B'], str(_trim))
+check('p39 trim: under cap utuh', len(dl._p39_trim({('A',1,'L'),('B',2,'S')})) == 2)
+# hygiene: redirect log produksi sebelum uji llm_call
+import tempfile
+dl.LOG=os.path.join(tempfile.gettempdir(),'test_v7_dl.jsonl')
+try: os.remove(dl.LOG)
+except Exception: pass
+_orig_req=jb._req
+def _boom(p): raise RuntimeError('conn refused (test)')
+jb._req=_boom
+r=dl.llm_call({'symbol':'BTCUSDT','side':'LONG'})
+check('P35 no-fallback: jev mati = REJECT jev_err', r.get('decision')=='REJECT' and str(r.get('reason','')).startswith('jev_err'), str(r))
+check('P35 no-fallback: gak ada model kedua', 'fallback' not in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'jev_bridge.py')).read().lower().replace('no-fallback','').replace('tanpa fallback',''))
+check('jev402_hit: Jev402 terdeteksi', dl.jev402_hit(jb.Jev402('x')) is True)
+check('jev402_hit: string 402 terdeteksi', dl.jev402_hit(Exception('HTTP 402 Payment Required')) is True)
+check('jev402_hit: error biasa bukan 402', dl.jev402_hit(Exception('HTTP 429 too many')) is False)
+jb._req=_orig_req
+
+print(f"\n===== test_v7: {PASS} pass / {FAIL} fail =====")
+sys.exit(1 if FAIL else 0)
