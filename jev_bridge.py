@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-jev_bridge.py — BOS v9.0 "THE TRADING GOD" via OpenRouter Decisions API (jev-1.13).
+jev_bridge.py — BOS v10.1 "THE TRADING GOD" via OpenRouter Decisions API (jev-1.13).
 ROMBAK TOTAL 30 Sep 2026 (ACC user): rubric 8-dimensi, noul veto, argmax→total, framing
-per-source panjang — SEMUA DIHAPUS. Ganti: persona v7.0 + pipeline 8 langkah + 1 pertanyaan
-choice (CONFIRMED_TIGHT/NORMAL/WIDE/REJECT). Output bos = keputusan murni; SL/TP dinamis
-dari varian + ATR kurir; pipeline_logs P1-P8 = audit trail deterministik host-side
-(smc_engine.pipeline_log) — bukan hasil LLM (lesson P34: jev gak bisa generate teks bebas).
+per-source panjang — SEMUA DIHAPUS. Ganti: persona GOD MINDSET + THE TRADING GOD (v9.0) +
+1 pertanyaan choice (CONFIRMED_TIGHT/NORMAL/WIDE/REJECT). Output bos = keputusan murni;
+SL/TP dinamis dari varian + ATR kurir (PURE UNCLAMPED v10.0). Determinisme dijaga
+host-enforcer di call_jev (FINAL SEAL) — bukan hasil LLM (lesson P34: jev gak bisa
+generate teks bebas).
 
 Resiliensi (dipertahankan): 429 retry 3 dtk (max 2); 402 = raise Jev402 → kandidat dilewati
 (FULL JEV NO-FALLBACK — gak ada model kedua).
@@ -64,10 +65,10 @@ def _context(brief):
     return f"Sinyal kurir: {sym} {side} (engine={src}). Payload JSON lengkap ada di state."
 
 def build_questions(brief):
-    """v7: SATU pertanyaan choice — bos mengeksekusi pipeline P1-P8 internal lalu pilih."""
+    """v10.1: SATU pertanyaan choice — bos analisis internal (PURE ATR + SuperFlow + MSS/FVG) lalu pilih."""
     q={"decision":{"type":"choice",
         "instructions":SYSTEM_IMMUNITY+"\n\n"+PERSONA_V7+"\n\nKONTEKS:\n"+_context(brief)+
-            "\n\nJalankan pipeline P1-P8 secara internal pada payload, lalu pilih opsi terakurat.",
+            "\n\nJalankan analisis penentuan arah secara internal pada payload JSON berdasarkan kecerdasan PURE ATR ADAPTIVE dan SUPER MONEY FLOW. Evaluasi keselarasan struktur market (MSS) dan Fair Value Gap (FVG). Pilih opsi terakurat berdasarkan kevalidan arah 5 menit ke depan.",
         "criteria":CRITERIA}}
     return q
 

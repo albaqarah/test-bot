@@ -13,6 +13,17 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 ---
 
 
+## CHANGELOG v10.1 (1 Okt) - ARCHITECTURE RE-ALIGNMENT (final touch)
+- Instruksi bos "Jalankan pipeline P1-P8 secara internal" (referensi nyangkut era persona lama)
+  DIGANTI verbatim directive: analisis internal berbasis PURE ATR ADAPTIVE + SUPER MONEY FLOW,
+  evaluasi keselarasan MSS & FVG, pilih opsi terakurat utk arah 5 menit ke depan.
+- Docstring stale jev_bridge (referensi smc_engine.pipeline_log yang sudah tidak exist) dihapus;
+  header disinkronkan v10.1.
+- Residu diketahui & DIPERTAHANKAN (di luar scope directive): teks CRITERIA CONFIRMED_TIGHT masih
+  menyebut "pipeline 1-8 semua selarah" — frasa naratif, bukan referensi simbol.
+- test_v7 +2 check (5e): instruksi baru verbatim + docstring bersih.
+---
+
 ## CHANGELOG v10.0 (1 Okt) - THE FINAL SCALPER GOD (Pure Unclamped ATR di Kurir)
 - Clamp sumber DIBONGKAR (directive): market_snapshot.py — `sl_pct = 1.5*atr_pct` murni 100%
   linear, TANPA max(0.8)/min(2.4). Kasus pemicu: JUP (ATR 0.401% -> murni 0.60%) & DOGE
