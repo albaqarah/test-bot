@@ -13,6 +13,15 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 ---
 
 
+## CHANGELOG v10.1.1 (1 Okt) - THE FINAL POLISH (branding)
+- Panel "BOT START": 'TYPESAFE SNIPER v9.0' -> 'TYPESAFE SNIPER v10.1 SOVEREIGN' (string versi
+  lama; isi panel ATR murni + floor 0.25% sudah benar sejak v10.0).
+- Label entry "P1→P8 · P2 … · P7 …" (blok P21b era lama) DIMUSNAHKAN -> diganti baris analisa
+  v10.1: "🧠 ANALISA · PURE ATR ✓ · SUPER MONEY FLOW ✓ · MSS ✅/— · FVG ✅/—" (faktual dari
+  sinyal, bukan LLM). EntryLoc tetap tampil di baris 🧭 (tanpa duplikasi).
+- test_v7 +2 check (5f).
+---
+
 ## CHANGELOG v10.1 (1 Okt) - ARCHITECTURE RE-ALIGNMENT (final touch)
 - Instruksi bos "Jalankan pipeline P1-P8 secara internal" (referensi nyangkut era persona lama)
   DIGANTI verbatim directive: analisis internal berbasis PURE ATR ADAPTIVE + SUPER MONEY FLOW,

@@ -215,6 +215,10 @@ check('v10.0 executor: fallback 1.2% cuma utk data kosong (tetap)', '_atr_f = fl
 check('v10.1 instruksi P1-P8 diganti PURE ATR + SUPERFLOW (verbatim)', 'Jalankan analisis penentuan arah secara internal' in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'jev_bridge.py')).read()
       and 'Jalankan pipeline P1-P8' not in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'jev_bridge.py')).read())
 check('v10.1 docstring stale pipeline_log musnah (jev_bridge)', 'pipeline_log' not in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'jev_bridge.py')).read())
+# ---------- 5f. v10.1.1 FINAL POLISH (branding) ----------
+_tg=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'tg_notify.py')).read()
+check('v10.1.1 panel BOT START = TYPESAFE SNIPER v10.1 SOVEREIGN', 'TYPESAFE SNIPER v10.1 SOVEREIGN' in _tg and 'v9.0' not in _tg.split('TYPESAFE SNIPER')[1][:60])
+check('v10.1.1 label P1→P8 musnah, ganti ANALISA v10.1', 'P1→P8' not in _tg and 'ANALISA · PURE ATR' in _tg and 'SUPER MONEY FLOW' in _tg)
 
 # ---------- 6. PAYLOAD KONTRAK v7 ----------
 ds.btc_bias=lambda: {'bias':'UP','b5':'UP','b1':'UP'}

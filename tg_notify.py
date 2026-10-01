@@ -165,7 +165,7 @@ def _regime_line():
 # ---------- START / STOP / RESTART ----------
 def fmt_start(saldo, n_open=0, maxpos=5, n_pair=41):
     r=_resume24()
-    return (f"🟢 <b>BOT START · TYPESAFE SNIPER v9.0</b>" + NL + DIV
+    return (f"🟢 <b>BOT START · TYPESAFE SNIPER v10.1 SOVEREIGN</b>" + NL + DIV
         + NL + f"🧾 Mode      {_mode_line()}"
         + NL + _equity(saldo)
         + NL + "💵 Margin    $2.00/trade · notional $20.00"
@@ -207,16 +207,12 @@ def fmt_open(e):
         if e.get('mss') and e['mss']!='NONE': parts.append("MSS "+str(e['mss']).replace('MSS_','').replace('_',' '))
         if e.get('fvg') and e['fvg']!='NONE': parts.append(f"FVG {e['fvg']}")
         if parts: smc=NL+' · '.join(parts)
-    # P21b: baris pipeline P1-P8 (faktual dari sinyal, bukan LLM)
+    # v10.1.1: label pipeline era lama DIMUSNAHKAN — visual entry kini alur analisa v10.1
+    # (PURE ATR + SUPER MONEY FLOW + MSS + FVG); faktual dari sinyal, bukan LLM.
     try:
-        _r6=e.get('rsi6')
-        _p5=''
-        if isinstance(_r6,(int,float)): _p5=f" · P5 {'wick!' if (_r6>85 or _r6<15) else 'ok'}"
         _p3='MSS✅' if e.get('mss') and e.get('mss')!='NONE' else 'MSS—'
         _p4='FVG✅' if e.get('fvg') and e.get('fvg')!='NONE' else 'FVG—'
-        _p2=(e.get('mf') or '').replace('🛰️ ','').split(' (')[0] or 'MF—'
-        _p7=e.get('conf')
-        smc+=NL+f"🧠 P1→P8 · P2 {_p2} · P3 {_p3} · P4 {_p4}{_p5} · P7 {_p7}"
+        smc+=NL+f"🧠 ANALISA · PURE ATR ✓ · SUPER MONEY FLOW ✓ · {_p3} · {_p4}"
     except Exception: pass
     r=_resume24()
     return ("🚀 <b>ENTRY</b> · "+e['symbol']+" · "+SIDE_ART.get(side,'')+f" <b>{side}</b>"
