@@ -13,6 +13,20 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 ---
 
 
+## CHANGELOG v11.0 (1 Okt) - PRE-EMPTIVE PREDATOR ENGINE
+- PRE-EMPTIVE PEAK DETECTOR (hybrid_rules.gen_hybrid): fade murni SHORT RSI6>=88 / LONG RSI6<=12
+  + volx>=1.5 + ekor lawan>=35% => BYPASS data-check HTF & veto 1h + grade 'A+' (entri sebelum
+  candle 5m close). Engine lain tetap fail-closed.
+- HOST-ENFORCER OVERRIDE (jev_bridge): grade A+ => CONFIRMED varian TIGHT paksa (reason
+  "PRE-EMPTIVE COPET v11.0…"), ditempatkan SEBELUM FINAL SEAL; FINAL SEAL tetap siaga utk grade lain.
+- EKSEKUTOR: TIGHT multiplier 0.75x -> 0.50x (potong 50% ruang ATR), RR 2.0 -> 2.5.
+- BUGFIX wiring (kelas P-silent-kill): call live gen_hybrid(..., btcv) positional jatuh ke slot
+  extra_engines (tidak pernah dipakai) => SuperFlow grade-boost v9.0 MATI SENYAP di produksi
+  sejak launch v9.0; test lolos krn pakai keyword. Fix: slot extra_engines dihapus dari signature,
+  call diganti btcv=btcv + regression check.
+- Sort kandidat: A+/A dulu. Panel START -> v11.0 PRE-EMPTIVE. test_v7 92/92.
+---
+
 ## CHANGELOG v10.1.1 (1 Okt) - THE FINAL POLISH (branding)
 - Panel "BOT START": 'TYPESAFE SNIPER v9.0' -> 'TYPESAFE SNIPER v10.1 SOVEREIGN' (string versi
   lama; isi panel ATR murni + floor 0.25% sudah benar sejak v10.0).

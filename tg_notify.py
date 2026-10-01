@@ -165,7 +165,7 @@ def _regime_line():
 # ---------- START / STOP / RESTART ----------
 def fmt_start(saldo, n_open=0, maxpos=5, n_pair=41):
     r=_resume24()
-    return (f"🟢 <b>BOT START · TYPESAFE SNIPER v10.1 SOVEREIGN</b>" + NL + DIV
+    return (f"🟢 <b>BOT START · TYPESAFE SNIPER v11.0 PRE-EMPTIVE</b>" + NL + DIV
         + NL + f"🧾 Mode      {_mode_line()}"
         + NL + _equity(saldo)
         + NL + "💵 Margin    $2.00/trade · notional $20.00"

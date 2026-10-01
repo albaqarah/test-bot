@@ -163,7 +163,7 @@ def gen_trend_pullback(kk, rs, vsma, htf15):
     return sigs
 
 
-def gen_hybrid(kk, rs, zz, vsma, htf15, htf1h_struct, extra_engines=None, cek_1h=True, btcv=None):
+def gen_hybrid(kk, rs, zz, vsma, htf15, htf1h_struct, cek_1h=True, btcv=None):
     """KURIR v7.0: 3 engine + HIGHER TF FILTER (Anti-Trap).
     v9.0: EMA-cross 15m TIDAK lagi menyaring (v8.0); veto 1h BEARISH/BULLISH_EXTREME berlaku
     ke SEMUA engine (fade ikut sejak v9.0); data HTF hilang = fail-closed semua engine.
@@ -172,7 +172,9 @@ def gen_hybrid(kk, rs, zz, vsma, htf15, htf1h_struct, extra_engines=None, cek_1h
     v9.0: btcv = Super Money Flow (rasio vol 3-bar BTC/SMA20, dari dewa_live) — lonjakan >= 1.5
     saat RSI6 kandidat di lembah (<25) / pucuk (>75) = suntikan volume raksasa -> grade A.
     v9.0: fade TIDAK lagi dikecualikan dari data-check HTF (fail-closed semua engine); veto 1h
-    *_EXTREME berlaku ke semua; EMA-cross 15m tetap dicabut (v8.0)."""
+    *_EXTREME berlaku ke semua; EMA-cross 15m tetap dicabut (v8.0).
+    v11.0: PRE-EMPTIVE PEAK — fade murni SHORT RSI6>=88 / LONG RSI6<=12 + volx>=1.5 + ekor
+    lawan>=35% => bypass data-check HTF & veto 1h + grade 'A+' (entri sebelum candle close)."""
     fade = [(s[0], s[1], s[2], 'fade') for s in gen_fade_climax(kk, rs, zz, vsma)]
     scalp = [(s[0], s[1], s[2], 'scalp') for s in gen_scalp_momentum(kk, rs, vsma)]
     trend = [(s[0], s[1], s[2], 'trend') for s in gen_trend_pullback(kk, rs, vsma, htf15)]
@@ -190,16 +192,32 @@ def gen_hybrid(kk, rs, zz, vsma, htf15, htf1h_struct, extra_engines=None, cek_1h
         _extreme = r6 is not None and ((side == 'L' and r6 < 25) or (side == 'S' and r6 > 75))
         if _extreme and btcv is not None and btcv >= 1.5:
             grade = 'A'
+        # ==== v11.0 PRE-EMPTIVE PEAK DETECTOR (directive) ====
+        # Fade murni di pucuk/lembah ABSOLUT (SHORT RSI6>=88 / LONG RSI6<=12) + volx>=1.5 +
+        # ekor lawan >=35% = jalur kilat: BYPASS data-check HTF & veto 1h (dilarang nunggu
+        # close candle 5m), grade dipaksa 'A+' -> enforcer override CONFIRMED TIGHT.
+        _volx = kk[i][5]/vsma[i] if vsma[i] else 0
+        _o=[x[1] for x in kk]; _h=[x[2] for x in kk]; _l=[x[3] for x in kk]; _c=[x[4] for x in kk]
+        _rng=_h[i]-_l[i]
+        _wick_top=(_h[i]-max(_o[i],_c[i]))/_rng*100 if _rng>0 else 0.0
+        _wick_bot=(min(_o[i],_c[i])-_l[i])/_rng*100 if _rng>0 else 0.0
+        _preemptive=False
+        if src=='fade' and r6 is not None:
+            if side=='S' and r6>=88 and _volx>=1.5 and _wick_top>=35.0: _preemptive=True
+            if side=='L' and r6<=12 and _volx>=1.5 and _wick_bot>=35.0: _preemptive=True
+        if _preemptive:
+            grade='A+'
         ok = True
-        # v9.0: data-check HTF berlaku ke SEMUA engine (fade ikut) — fail-closed None.
-        # EMA-cross 15m tetap dicabut (v8.0); veto 1h *_EXTREME berlaku semua.
-        m = htf15[i] if i < len(htf15) else None
-        if m is None:
-            ok = False              # fail-closed: gak bisa validasi = gak boleh tembak
-        if cek_1h:
-            st = str(htf1h_struct)
-            if side == 'L' and 'BEARISH_EXTREME' in st: ok = False
-            if side == 'S' and 'BULLISH_EXTREME' in st: ok = False
+        # v11.0: jalur pre-emptive bypass filter HTF (jalur kilat pucuk absolut); engine lain
+        # tetap fail-closed None + veto 1h (v9.0). EMA-cross 15m tetap dicabut (v8.0).
+        if not _preemptive:
+            m = htf15[i] if i < len(htf15) else None
+            if m is None:
+                ok = False              # fail-closed: gak bisa validasi = gak boleh tembak
+            if cek_1h:
+                st = str(htf1h_struct)
+                if side == 'L' and 'BEARISH_EXTREME' in st: ok = False
+                if side == 'S' and 'BULLISH_EXTREME' in st: ok = False
         if not ok: continue
         by_bar.setdefault(i, []).append((side, grade, src))
     out = []
@@ -214,6 +232,10 @@ def gen_hybrid(kk, rs, zz, vsma, htf15, htf1h_struct, extra_engines=None, cek_1h
             ss = [s for s in ss if s[2] == 'fade'] or ss
             sides = {s[0] for s in ss}
             if len(sides) > 1: continue        # tetap bentrok (tak mungkin) = kabut
-        grade = 'A' if (len(ss) > 1 or any(s[1] == 'A' for s in ss)) else 'B'
+        # v11.0: A+ (pre-emptive peak) TIDAK boleh ditimpa resolusi biasa.
+        if any(s[1] == 'A+' for s in ss):
+            grade = 'A+'
+        else:
+            grade = 'A' if (len(ss) > 1 or any(s[1] == 'A' for s in ss)) else 'B'
         out.append((i, ss[0][0], grade, ss[0][2]))
     return out

@@ -195,7 +195,7 @@ check('v9.0 persona TRAIL-LOCK kilat 0.4% (predator rule 2)', 'TRAIL-LOCK' in jb
 _t=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'dewa_live.py')).read()
 _t=re.sub(r'"""[\s\S]*?"""', ' ', _t); _t=re.sub(r'#.*', '', _t)
 check('v8.0 executor: multiplier statis musnah', 'SL_PCT*0.5' not in _t and 'SL_PCT*0.67' not in _t and 'SL_PCT*1.5, 2.5' not in _t)
-check('v8.0 executor: blok PURE ATR verbatim (0.75x/1.30x/1.0x, TP 2.0/2.5)', '_atr_f * 0.75' in _t and '_atr_f * 1.30' in _t and 'tp_rr = 2.0' in _t and 'sl_pct = _atr_f' in _t)
+check('v11.0 executor: TIGHT 0.50x + RR 2.5 (pre-emptive pucuk)', '_atr_f * 0.50' in _t and 'tp_rr = 2.5' in _t and '_atr_f * 0.75' not in _t)
 check('v8.0 executor: ATR widening-only P32 musnah (ATR = basis mutlak)', '_sug_f>sl_pct' not in _t and '_P32_ATR_SL' not in _t)
 check('v8.0 TP_RR_CHOP/TREND kode mati dihapus', 'TP_RR_CHOP' not in _t and 'TP_RR_TREND' not in _t)
 # ---------- 5c. v9.0 TRADING GOD ENGINE ----------
@@ -217,8 +217,34 @@ check('v10.1 instruksi P1-P8 diganti PURE ATR + SUPERFLOW (verbatim)', 'Jalankan
 check('v10.1 docstring stale pipeline_log musnah (jev_bridge)', 'pipeline_log' not in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'jev_bridge.py')).read())
 # ---------- 5f. v10.1.1 FINAL POLISH (branding) ----------
 _tg=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'tg_notify.py')).read()
-check('v10.1.1 panel BOT START = TYPESAFE SNIPER v10.1 SOVEREIGN', 'TYPESAFE SNIPER v10.1 SOVEREIGN' in _tg and 'v9.0' not in _tg.split('TYPESAFE SNIPER')[1][:60])
+check('v11.0 panel BOT START = TYPESAFE SNIPER v11.0 PRE-EMPTIVE', 'TYPESAFE SNIPER v11.0 PRE-EMPTIVE' in _tg and 'SOVEREIGN' not in _tg.split('TYPESAFE SNIPER')[1][:60])
 check('v10.1.1 label P1→P8 musnah, ganti ANALISA v10.1', 'P1→P8' not in _tg and 'ANALISA · PURE ATR' in _tg and 'SUPER MONEY FLOW' in _tg)
+# ---------- 5g. v11.0 PRE-EMPTIVE PREDATOR ----------
+check('v11.0 kurir: PRE-EMPTIVE PEAK DETECTOR di gen_hybrid', '_preemptive' in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'hybrid_rules.py')).read()
+      and "r6>=88 and _volx>=1.5 and _wick_top>=35.0" in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'hybrid_rules.py')).read()
+      and "r6<=12 and _volx>=1.5 and _wick_bot>=35.0" in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'hybrid_rules.py')).read())
+check('v11.0 kurir: bypass HTF utk jalur pre-emptive (engine lain fail-closed tetap)', 'if not _preemptive:' in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'hybrid_rules.py')).read())
+check('v11.0 enforcer: override A+ -> CONFIRMED TIGHT (sebelum FINAL SEAL)', 'PRE-EMPTIVE COPET v11.0' in _jsrc and "_grade=='A+'" in _jsrc)
+check('v11.0 resolusi konflik: A+ tidak ditimpa A/B', "if any(s[1] == 'A+' for s in ss):" in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'hybrid_rules.py')).read())
+# perilaku: fixture SHORT pucuk absolut (RSI6 96, volx 4.1, wick atas ~79%) -> A+ meski HTF None
+_k=[[i*300000, 100.0, 100.2, 99.8, 100.0, 10.0] for i in range(300)]
+for _j in range(292, 297):
+    _cc=100+(_j-291)*0.8; _k[_j]=[_j*300000, _cc-0.3, _cc+0.4, _cc-0.5, _cc, 14.0]
+_k[297]=[297*300000, 103.4, 106.5, 103.2, 103.9, 45.0]
+_cc=[r[4] for r in _k]; _rs=rb.rsi6(_cc); _zz=rb.zscore(_cc)
+_vv=[r[5] for r in _k]; _vm=[0.0]*300
+for _i2 in range(20,300): _vm[_i2]=sum(_vv[_i2-20:_i2])/20
+_sig=hr.gen_hybrid(_k,_rs,_zz,_vm,[None]*300,None,btcv=None)   # HTF None + struct None!
+check('v11.0 perilaku: pucuk absolut (RSI6 96/volx 4.1/wick 79%) -> A+ walau HTF None', any(s[1]=='S' and s[2]=='A+' for s in _sig), str(_sig))
+jb._req=lambda p: {'answers':{'decision':{'choice':'REJECT','probabilities':{'REJECT':0.9},'confidence':0.5}}}   # bos nolak pun, A+ wajib menang (override)
+_r=jb.call_jev({'symbol':'GALAUSDT','side':'SHORT','grade':'A+','mss':'NONE','engine':'fade'})
+check('v11.0 perilaku: enforcer A+ mss NONE -> CONFIRMED TIGHT (override menang dr bos REJECT)', _r['decision']=='CONFIRMED' and _r['variant']=='TIGHT', str(_r))
+jb._req=lambda p: {'answers':{'decision':{'choice':'CONFIRMED_NORMAL','probabilities':{'CONFIRMED_NORMAL':0.6},'confidence':0.6}}}
+_r2=jb.call_jev({'symbol':'GALAUSDT','side':'SHORT','grade':'A','mss':'NONE','engine':'fade','metrics':{'rsi6Realtime':55,'volx':2.0,'wick_ratio_pct':{'low':10.0,'high':60.0}}})
+check('v11.0 seal tetap: grade A + fade non-ekstrem + mss NONE -> REJECT', _r2['decision']=='REJECT', str(_r2))
+_hrsrc=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'hybrid_rules.py')).read()
+check('v11.0 wiring: gen_hybrid tanpa slot mati extra_engines + dipanggil dgn btcv=btcv', 'extra_engines' not in _hrsrc
+      and 'gen_hybrid(kk,rs,zz,vsma,htf15,maps[\'1h_struct\'],btcv=btcv)' in _t)
 
 # ---------- 6. PAYLOAD KONTRAK v7 ----------
 ds.btc_bias=lambda: {'bias':'UP','b5':'UP','b1':'UP'}

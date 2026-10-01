@@ -376,7 +376,7 @@ def _iterate_inner(once=False):
             kts=[r[0] for r in kk]
             htf15=hr.align_htf(kts, maps['15m'])   # forward-fill: bar 15m terakhir utk tiap 5m
             btcv=smc_btc_volume()  # v9.0 Super Money Flow: volume 3-bar BTC utk kurir
-            sigs=hr.gen_hybrid(kk,rs,zz,vsma,htf15,maps['1h_struct'],btcv)
+            sigs=hr.gen_hybrid(kk,rs,zz,vsma,htf15,maps['1h_struct'],btcv=btcv)  # v11.0 FIX: dulu positional jatuh ke slot extra_engines (mati) — SuperFlow hidup
             # dedup via done-set (sym,bar_ts,side) — di-load sekali di atas, BUKAN per-pair reset
             for (si,side,grade,src) in sigs:
                 i=si
@@ -442,7 +442,7 @@ def _iterate_inner(once=False):
         st.setdefault('last_seen',{})[sym]=kk[-1][0]
     st['done']=_p39_trim(done)  # persist dedup (P39: trim by bar_ts, cap 2000)
     # 3) bos putuskan (batch, urut grade A dulu)
-    candidates.sort(key=lambda x:(x['grade']!='A', x['sym']))
+    candidates.sort(key=lambda x:(x['grade'] not in ('A','A+'), x['sym']))  # A+/A dulu (v11.0)
     confirmed=0
     # GATE HEMAT-API (user): posisi penuh 5/5 -> kurir DILARANG nanya bos LLM. Notif sekali per kejadian.
     if candidates and n_open>=og.MAX_GLOBAL_POSITIONS:
@@ -523,8 +523,10 @@ def _iterate_inner(once=False):
 
         # Varian Bos Jev bertugas memodifikasi agresivitas ruang ATR secara adaptif:
         if variant == 'TIGHT':
-            sl_pct = _atr_f * 0.75  # Mengetatkan ruang ATR sebesar 25% untuk market agresif
-            tp_rr = 2.0             # Target TP sangat dekat, kejar eksekusi cepat
+            # v11.0 PRE-EMPTIVE: potong ruang ATR 50% (dulu 25%) — entri sudah di pucuk/
+            # lembah absolut = koordinat harga terbaik, SL super tipis, rugi minimal.
+            sl_pct = _atr_f * 0.50
+            tp_rr = 2.5             # v11.0: RR 2.5 (dulu 2.0) — TP kilat linear
         elif variant == 'WIDE':
             sl_pct = _atr_f * 1.30  # Melebarkan ruang ATR sebesar 30% jika wick sedang mengamuk
             tp_rr = 2.5

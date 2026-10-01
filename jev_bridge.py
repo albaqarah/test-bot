@@ -108,6 +108,17 @@ def call_jev(brief, symbol=''):
         out["reason"]=f"payload-cacat/choice-asing:{choice[:30]}"
         return out
 
+    # ===== [v11.0 PRE-EMPTIVE HOST ENFORCER OVERRIDE] =====
+    # Pucuk/lembah ABSOLUT (grade A+ dari kurir: fade murni + RSI6>=88/<=12 + volx>=1.5 +
+    # ekor lawan>=35%) = entri SEBELUM candle 5m close — aturan penendang mss-NONE DIBYPASS
+    # total utk jalur ini (directive v11.0). Grade A+ hanya bisa lahir dr jalur kurir tsb.
+    _grade=str((brief.get('grade','') if isinstance(brief,dict) else '') or '').upper()
+    if _grade=='A+':
+        out["decision"]="CONFIRMED"
+        out["variant"]="TIGHT"
+        out["reason"]="PRE-EMPTIVE COPET v11.0: Terdeteksi Pucuk/Lembah Absolut Berdasarkan Volume Climax & RSI6. Eksekusi Sebelum Longsor."
+        return out
+
     # ===== [v7.2 FINAL SEAL - HOST ENFORCER] =====
     # Aturan P4 dieksekusi deterministik (bukan cuma prompt): mss NONE/kosong +
     # engine bukan-fade-ekstrem = CONFIRMED dibuang ke REJECT paksa. Ini menutup
