@@ -120,8 +120,11 @@ def gen_scalp_momentum(kk, rs, vsma):
         rng = h[i] - l[i]
         if rng <= 0: continue
         volx = v[i] / vsma[i] if vsma[i] else 0
-        if volx < 1.2: continue                 # v7.1: 1.5 -> 1.2 (sat-set kembali)
         x6 = rs[i]
+        # v9.0: gate volx dilonggarkan ke >= 1.0 saat RSI6 di lembah (<25) / pucuk (>75)
+        # (sesi tenang pun boleh setor; kualitas tetap dinilai bos)
+        _gate = 1.0 if (x6 is not None and (x6 < 25 or x6 > 75)) else 1.2
+        if volx < _gate: continue
         if c[i] > o[i]:
             if x6 is not None and x6 <= 85:   # P12 anti-pucuk
                 sigs.append((i, 'L', 'A' if volx >= 2.0 else 'B'))
@@ -160,14 +163,16 @@ def gen_trend_pullback(kk, rs, vsma, htf15):
     return sigs
 
 
-def gen_hybrid(kk, rs, zz, vsma, htf15, htf1h_struct, extra_engines=None, cek_1h=True):
+def gen_hybrid(kk, rs, zz, vsma, htf15, htf1h_struct, extra_engines=None, cek_1h=True, btcv=None):
     """KURIR v7.0: 3 engine + HIGHER TF FILTER (Anti-Trap).
-    - Sinyal LONG 5m HANYA jika EMA20(15m) > EMA50(15m) DAN 1h bukan BEARISH ekstrem
-      (kecuali FADE CLIMAX — fade climax dikecualikan sesuai spec).
-    - Sinyal SHORT 5m HANYA jika EMA20(15m) < EMA50(15m) DAN 1h bukan BULLISH ekstrem
-      (kecuali FADE CLIMAX).
+    v9.0: EMA-cross 15m TIDAK lagi menyaring (v8.0); veto 1h BEARISH/BULLISH_EXTREME berlaku
+    ke SEMUA engine (fade ikut sejak v9.0); data HTF hilang = fail-closed semua engine.
     htf15: list per-bar 15m (hasil align_htf, forward-fill) atau None; htf1h_struct: string struktur 1h
-    (cek 1h dari cek_1h, default True). Output: (idx, side, grade, src); src in ('fade','scalp','trend')."""
+    (cek 1h dari cek_1h, default True). Output: (idx, side, grade, src); src in ('fade','scalp','trend').
+    v9.0: btcv = Super Money Flow (rasio vol 3-bar BTC/SMA20, dari dewa_live) — lonjakan >= 1.5
+    saat RSI6 kandidat di lembah (<25) / pucuk (>75) = suntikan volume raksasa -> grade A.
+    v9.0: fade TIDAK lagi dikecualikan dari data-check HTF (fail-closed semua engine); veto 1h
+    *_EXTREME berlaku ke semua; EMA-cross 15m tetap dicabut (v8.0)."""
     fade = [(s[0], s[1], s[2], 'fade') for s in gen_fade_climax(kk, rs, zz, vsma)]
     scalp = [(s[0], s[1], s[2], 'scalp') for s in gen_scalp_momentum(kk, rs, vsma)]
     trend = [(s[0], s[1], s[2], 'trend') for s in gen_trend_pullback(kk, rs, vsma, htf15)]
@@ -179,18 +184,22 @@ def gen_hybrid(kk, rs, zz, vsma, htf15, htf1h_struct, extra_engines=None, cek_1h
     by_bar = {}
     for s in allsigs:
         i, side, grade, src = s
+        # v9.0 SUPER MONEY FLOW injection: lonjakan volume BTC searah (btcv >= 1.5) saat
+        # RSI6 kandidat di lembah (<25) / pucuk (>75) = suntikan dana bandar -> grade A.
+        r6 = rs[i]
+        _extreme = r6 is not None and ((side == 'L' and r6 < 25) or (side == 'S' and r6 > 75))
+        if _extreme and btcv is not None and btcv >= 1.5:
+            grade = 'A'
         ok = True
-        if src != 'fade':   # fade climax dikecualikan dari filter (spec v7.0)
-            m = htf15[i] if i < len(htf15) else None
-            if m is None:
-                ok = False          # fail-closed: gak bisa validasi = gak boleh tembak
-            # v8.0 (directive user): EMA-cross 15m DICABUT dari gerbang kurir — cross EMA
-            # selalu telat; bos Jev menilai arah lewat data JSON (HTF + MSS + money-flow).
-            # Kurir cukup memastikan data HTF ADA (fail-closed None tetap).
-            if cek_1h:
-                st = str(htf1h_struct)
-                if side == 'L' and 'BEARISH_EXTREME' in st: ok = False
-                if side == 'S' and 'BULLISH_EXTREME' in st: ok = False
+        # v9.0: data-check HTF berlaku ke SEMUA engine (fade ikut) — fail-closed None.
+        # EMA-cross 15m tetap dicabut (v8.0); veto 1h *_EXTREME berlaku semua.
+        m = htf15[i] if i < len(htf15) else None
+        if m is None:
+            ok = False              # fail-closed: gak bisa validasi = gak boleh tembak
+        if cek_1h:
+            st = str(htf1h_struct)
+            if side == 'L' and 'BEARISH_EXTREME' in st: ok = False
+            if side == 'S' and 'BULLISH_EXTREME' in st: ok = False
         if not ok: continue
         by_bar.setdefault(i, []).append((side, grade, src))
     out = []

@@ -72,7 +72,17 @@ def scalp_case(o,h,l,cx,vx,reds=0):
     for i in range(20,len(vv)): vm[i]=sum(vv[i-20:i])/20
     return hr.gen_scalp_momentum(k,rr,vm)
 check('scalp v7.1: volx>=1.2 LONG (volx besar + body besar tetap masuk)', any(s[1]=='L' for s in scalp_case(99.5,102.5,99.4,102.3,25.0,reds=2)))
-check('scalp v7.1: volx<1.2 ditolak', not scalp_case(99.5,102.5,99.4,102.3,11.0,reds=2))
+# v9.0: gate volx = 1.2 normal, 1.0 saat RSI6 lembah(<25)/pucuk(>75) — isolasi penuh (RSI sintetis)
+def scalp_case_rs(rsx, vol_abs):
+    k=base_kk(300)
+    k[297]=[297*300000, 99.5, 102.5, 99.4, 102.3, vol_abs]
+    rr=[50.0]*300; rr[297]=rsx
+    vv=[r[5] for r in k]; vm=[0.0]*len(vv)
+    for i in range(20,len(vv)): vm[i]=sum(vv[i-20:i])/20
+    return hr.gen_scalp_momentum(k,rr,vm)
+check('v9.0 scalp: RSI6 netral (50) + volx 1.09 ditolak (gate normal 1.2)', not scalp_case_rs(50.0,11.5))
+check('v9.0 scalp: RSI6 netral (50) + volx 2.22 lolos gate normal', any(s[1]=='L' for s in scalp_case_rs(50.0,25.0)))
+check('v9.0 scalp relief: RSI6 pucuk (80) + volx 1.09 lolos (gate 1.0)', any(s[1]=='L' for s in scalp_case_rs(80.0,11.5)))
 check('scalp v7.1: body kecil (33%) TETAP lolos — kualitas body dinilai bos', any(s[1]=='L' for s in scalp_case(99.5,103.0,98.5,101.0,25.0,reds=2)),
       str(scalp_case(99.5,103.0,98.5,101.0,25.0,reds=2)))
 check('scalp grade: volx 1.4=B, volx>=2.0=A',
@@ -107,11 +117,25 @@ def htf_case(src, e20, e50, struct='RANGING'):
 # v8.0: EMA-cross 15m DICABUT dari gerbang kurir — cross berlawanan GAK lagi blok (bos menilai arah via JSON)
 check('v8.0 HTF: EMA-cross 15m dicabut — scalp lolos walau cross berlawanan', any(s[1]=='L' and s[3]=='scalp' for s in htf_case('scalp',10.0,11.0)), str(htf_case('scalp',10.0,11.0)))
 check('v8.0 HTF: 1h BEARISH_EXTREME tetap blok LONG non-fade', not htf_case('scalp',12.0,11.0,'BEARISH_EXTREME_DUMP'))
-check('HTF: fade LONG DIKECUALIKAN dr filter', any(s[1]=='L' and s[3]=='fade' for s in htf_case('fade',10.0,11.0,'BEARISH_EXTREME_DUMP')),
+# v9.0: fade TIDAK dikecualikan lagi — veto 1h ekstrem berlaku semua engine
+check('v9.0 HTF: fade LONG ikut veto 1h BEARISH_EXTREME (gak dikecualikan lagi)', not any(s[1]=='L' and s[3]=='fade' for s in htf_case('fade',10.0,11.0,'BEARISH_EXTREME_DUMP')),
       str(htf_case('fade',10.0,11.0,'BEARISH_EXTREME_DUMP')))
+check('v9.0 HTF: fade LONG tetap hidup di 1h netral', any(s[1]=='L' and s[3]=='fade' for s in htf_case('fade',10.0,11.0)))
 # v7.1: konflik fade LONG vs scalp SHORT di bar washout — fade menang, sinyal gak dibuang
 res=htf_case('fade',12.0,11.0)
 check('v7.1 konflik fade vs scalp: fade menang (sinyal hidup)', any(s[1]=='L' and s[3]=='fade' for s in res), str(res))
+# v9.0 SUPER MONEY FLOW: vol BTC meledak (btcv>=1.5) + RSI6 lembah -> fade grade B naik grade A
+kf=base_kk(300)
+for j in range(100,297): kf[j][4]=100+(0.5 if j%2 else -0.5)
+kf[297]=[297*300000, 99.0, 99.5, 87.0, 92.0, 12.0]   # climax tapi volume tipis (volx ~1.2 -> grade B)
+cf=[r[4] for r in kf]; rf=rb.rsi6(cf); zf=rb.zscore(cf)
+vf=[r[5] for r in kf]; vmf=[0.0]*len(vf)
+for i in range(20,len(vf)): vmf[i]=sum(vf[i-20:i])/20
+htfF=[(12.0,11.0)]*len(kf)
+base=[s for s in hr.gen_hybrid(kf,rf,zf,vmf,htfF,'RANGING') if s[3]=='fade']
+boost=[s for s in hr.gen_hybrid(kf,rf,zf,vmf,htfF,'RANGING',btcv=2.0) if s[3]=='fade']
+check('v9.0 superflow: fade grade B tanpa suntikan BTC', base and base[0][2]=='B', str(base))
+check('v9.0 superflow: suntikan BTC vol>=1.5 + RSI6 lembah -> grade A', boost and boost[0][2]=='A', str(boost))
 # fail-closed: data HTF None = non-fade diblok
 k=base_kk(300)
 for j in range(2):
@@ -135,15 +159,16 @@ jb._req=lambda p: {'answers':{'decision':{'choice':'REJECT','probabilities':{'RE
 r=jb.call_jev({'symbol':'XAUUSDT','side':'SHORT'})
 check('REJECT sah dgn prob', r['decision']=='REJECT' and r['probs'].get('REJECT')==0.9, str(r))
 jb._req=_orig
-check('persona v7 verbatim', 'DILARANG KERAS' in jb.SYSTEM_IMMUNITY and 'TYPESAFE SNIPER v7.0' in jb.PERSONA_V7 and '8 LANGKAH' in jb.PERSONA_V7 and 'P8' in jb.PERSONA_V7)
+check('v9.0 persona verbatim (THE TRADING GOD + GOD MINDSET)', 'GOD MINDSET v9.0' in jb.SYSTEM_IMMUNITY and 'THE TRADING GOD v9.0' in jb.PERSONA_V7 and 'RSI6 > 80' in jb.PERSONA_V7 and '0.4%' in jb.PERSONA_V7)
 check('criteria 4 opsi', list(jb.CRITERIA)==['CONFIRMED_TIGHT','CONFIRMED_NORMAL','CONFIRMED_WIDE','REJECT'])
 # v7.1 ANTI-CHASE COMPILER GUARD
-check('v7.1 anti-chase di P5 persona', 'ANTI-CHASE' in jb.PERSONA_V7 and 'WAIT_FOR_RETRACE_TO_FVG' in jb.PERSONA_V7
-      and '3.0 ATR' in jb.PERSONA_V7 and 'entryStatus' in jb.PERSONA_V7)
+# v9.0: persona diganti verbatim (directive) — guard anti-chase tinggal di CRITERIA/kode enforcer
+_jsrc=open(jb.__file__).read()
+check('v7.2.2 FINAL-SEAL fade 3-syarat di KODE enforcer (bukan cuma persona)', 'INVALID_FADE_NO_CLIMAX_VOLUME' in _jsrc and 'MISSING_STRUCTURE_CONFIRMATION' in _jsrc)
 check('v7.1 REJECT criteria sebut CHASE', 'CHASE' in jb.CRITERIA['REJECT'] and 'WAIT_FOR_RETRACE_TO_FVG' in jb.CRITERIA['REJECT'])
 # v7.2 FINAL SEAL: HARD RULE MSS
-check('v7.2 FINAL SEAL di P4 persona', 'FINAL SEAL' in jb.PERSONA_V7 and 'MISSING_STRUCTURE_CONFIRMATION' in jb.PERSONA_V7
-      and 'rsi6Realtime < 20' in jb.PERSONA_V7)
+# v9.0: FINAL SEAL bukan lagi di persona — persona predator + seal tetap di kode
+check('v9.0 persona predator RSI6 lintas-aset (SHORT >80 / LONG <20) verbatim', 'RSI6 > 80' in jb.PERSONA_V7 and 'RSI6 < 20' in jb.PERSONA_V7)
 check('v7.2 REJECT criteria sebut MISSING_STRUCTURE', 'MISSING_STRUCTURE_CONFIRMATION' in jb.CRITERIA['REJECT'])
 jb._req=lambda p: {'answers':{'decision':{'choice':'CONFIRMED_NORMAL','probabilities':{'CONFIRMED_NORMAL':0.9},'confidence':0.9}}}
 r=jb.call_jev({'symbol':'INJUSDT','side':'LONG','mss':'NONE','engine':'scalp'})
@@ -166,14 +191,21 @@ jb._req=_orig
 
 # ---------- 5b. v8.0 PURE ATR ADAPTIVE SCALPER ----------
 check('v8.0 CRITERIA TIGHT scalp (SL 0.6%/TP 1.5%)', '0.6%' in jb.CRITERIA['CONFIRMED_TIGHT'] and '1.5%' in jb.CRITERIA['CONFIRMED_TIGHT'])
-check('v8.0 persona P7 SCALP-LOCK + TRAIL-LOCK >= 0.6%', 'SCALP-LOCK DYNAMIC' in jb.PERSONA_V7 and 'TRAIL-LOCK' in jb.PERSONA_V7 and '>= 0.6%' in jb.PERSONA_V7)
+check('v9.0 persona TRAIL-LOCK kilat 0.4% (predator rule 2)', 'TRAIL-LOCK' in jb.PERSONA_V7 and '0.4%' in jb.PERSONA_V7 and 'Dilarang pelit' in jb.PERSONA_V7)
 _t=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'dewa_live.py')).read()
 _t=re.sub(r'"""[\s\S]*?"""', ' ', _t); _t=re.sub(r'#.*', '', _t)
 check('v8.0 executor: multiplier statis musnah', 'SL_PCT*0.5' not in _t and 'SL_PCT*0.67' not in _t and 'SL_PCT*1.5, 2.5' not in _t)
 check('v8.0 executor: blok PURE ATR verbatim (0.75x/1.30x/1.0x, TP 2.0/2.5)', '_atr_f * 0.75' in _t and '_atr_f * 1.30' in _t and 'tp_rr = 2.0' in _t and 'sl_pct = _atr_f' in _t)
 check('v8.0 executor: ATR widening-only P32 musnah (ATR = basis mutlak)', '_sug_f>sl_pct' not in _t and '_P32_ATR_SL' not in _t)
-check('v8.0 P19 guard pakai SL efektif ATR (bukan SL_PCT dasar)', '_sl_eff = entry*(1-sl_pct)' in _t and 'max(sl_pct, SL_PCT*1.5)' in _t)
 check('v8.0 TP_RR_CHOP/TREND kode mati dihapus', 'TP_RR_CHOP' not in _t and 'TP_RR_TREND' not in _t)
+# ---------- 5c. v9.0 TRADING GOD ENGINE ----------
+check('v9.0 P36 clamp statis musnah', 'max(0.003,min(0.030,sl_pct))' not in _t and 'P36 SANITY' not in _t)
+check('v9.0 P19 range-guard musnah (SL murni ATR linear)', 'range_guard_wide' not in _t and 'P19 RANGE-POSITION' not in _t)
+check('v9.0 Super Money Flow: helper + wiring ke gen_hybrid', 'def smc_btc_volume' in _t and 'btcv=smc_btc_volume()' in _t)
+_exp=os.path.join(os.path.dirname(os.path.abspath(__file__)),'.env.example')
+if not os.path.exists(_exp): _exp=os.path.join(os.path.dirname(os.path.abspath(__file__)),'test-bot','.env.example')
+_ex=open(_exp).read()
+check('v9.0 TRAIL_ACT 0.004 / TRAIL_DIST 0.002 (.env.example)', 'TRAIL_ACT=0.004' in _ex and 'TRAIL_DIST=0.002' in _ex)
 
 # ---------- 6. PAYLOAD KONTRAK v7 ----------
 ds.btc_bias=lambda: {'bias':'UP','b5':'UP','b1':'UP'}

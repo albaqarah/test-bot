@@ -106,6 +106,18 @@ def live_px(sym):
     except Exception:
         return None
 
+def smc_btc_volume():
+    """v9.0 Super Money Flow: rasio volume 3-bar terakhir BTC vs SMA20 — suntikan dana pasar.
+    None kalau data gagal (fail-open: kurir jalan normal tanpa sinyal superflow)."""
+    try:
+        kk=fetch_hist_klines('BTCUSDT','5m',25)
+        v=[float(x[5]) for x in kk]
+        vma=sum(v[-23:-3])/20 or 1e-9
+        return round(sum(v[-3:])/(3*vma),2)
+    except Exception:
+        return None
+
+
 def fund_last(sym):
     try:
         import urllib.request
@@ -363,7 +375,8 @@ def _iterate_inner(once=False):
             maps=hr.build_htf_maps(sym,len(kk))
             kts=[r[0] for r in kk]
             htf15=hr.align_htf(kts, maps['15m'])   # forward-fill: bar 15m terakhir utk tiap 5m
-            sigs=hr.gen_hybrid(kk,rs,zz,vsma,htf15,maps['1h_struct'])
+            btcv=smc_btc_volume()  # v9.0 Super Money Flow: volume 3-bar BTC utk kurir
+            sigs=hr.gen_hybrid(kk,rs,zz,vsma,htf15,maps['1h_struct'],btcv)
             # dedup via done-set (sym,bar_ts,side) — di-load sekali di atas, BUKAN per-pair reset
             for (si,side,grade,src) in sigs:
                 i=si
@@ -526,42 +539,9 @@ def _iterate_inner(once=False):
         except Exception: pass
         # (P32 ATR-SL lama DIGABUNG ke blok v8.0 di atas — ATR kini basis utama SL,
         # bukan widening-only; blok _sug_f>sl_pct DIHAPUS per directive v8.0.)
-        # P19 RANGE-POSITION GUARD: SL yang jatuh DI DALAM range 6 jam (72 bar) gampang kena noise/wick.
-        # Kasus RUNE 25 Sep 08:01 WIB: LONG @0.6402, SL 1.2% = 0.6325 — cuma 0.06% di atas low range
-        # 0.6319 → wick ke low range aja cukup memotong (dan benar terjadi). Solusi: kalau level SL
-        # berada di dalam range → SL dipaksa WIDE (1.8%) sampai keluar dr tepi range. Best-effort.
-        try:
-            _kc=k_cache.get(cd['sym']) or []
-            if len(_kc)<73:
-                _hi=_lo=None
-            else:
-                _hi=max(float(b[2]) for b in _kc[-72:]); _lo=min(float(b[3]) for b in _kc[-72:])
-            if _hi>_lo:
-                _pos=(entry-_lo)/(_hi-_lo)
-                # SL efektif berada DI DALAM range = pasti bisa kena noise range biasa (kasus RUNE:
-                # SL 0.6325 > low 0.6319 — cukup wick ke low range untuk memotong).
-                _sl_eff = entry*(1-sl_pct) if side=='LONG' else entry*(1+sl_pct)
-                _sl_in_range = _sl_eff > _lo if side=='LONG' else _sl_eff < _hi
-                if side=='LONG' and _sl_in_range and variant!='WIDE':
-                    sl_pct = max(sl_pct, SL_PCT*1.5)   # P19 guard: SL dipaksa keluar range 6-jam
-                    tp_rr = max(tp_rr, 2.5)            # RR dijaga minimal scalp-lock
-                    log({'event':'range_guard_wide','symbol':cd['sym'],'side':side,
-                         'pos_in_range':round(_pos,2),'range_hi':_hi,'range_lo':_lo,
-                         'msg':'LONG deket resistance 6-jam — SL di-WIDE-in'})
-                elif side=='SHORT' and _sl_in_range and variant!='WIDE':
-                    sl_pct = max(sl_pct, SL_PCT*1.5)   # P19 guard: SL dipaksa keluar range 6-jam
-                    tp_rr = max(tp_rr, 2.5)            # RR dijaga minimal scalp-lock
-                    log({'event':'range_guard_wide','symbol':cd['sym'],'side':side,
-                         'pos_in_range':round(_pos,2),'range_hi':_hi,'range_lo':_lo,
-                         'msg':'SHORT deket support 6-jam — SL di-WIDE-in'})
-        except Exception:
-            pass  # guard best-effort; kag gagal = perilaku lama
-        # NORMAL / tanpa varian = angka engine (SL_PCT & RR regime) — fallback selalu ada
-        # P36 SANITY GUARD: SL wajar 0.3%-3.0% dari harga entry — mematikan SELURUH kelas
-        # bug satuan (persen vs fraksi) dari sumber mana pun. SL negatif/absurd = posisi
-        # jalan TANPA tameng (kasus WLD 29 Sep: SL -208%). Clamp ini hanya menyentuh nilai
-        # patologis: semua jalur normal (TIGHT 0.8 / NORMAL 1.2 / WIDE 1.8 / ATR max 2.4) lolos utuh.
-        sl_pct=max(0.003,min(0.030,sl_pct))
+        # (P19 range-guard DIHAPUS v9.0 per directive — SL murni ATR linear, tanpa intervensi range.)
+        # v9.0: P36 clamp statis DIHAPUS per directive — sl_pct murni 100% mengikuti
+        # kalkulasi Pure ATR (slSuggest) secara linear tanpa pembatas atas/bawah.
         sl_d=entry*sl_pct; tp_d=sl_d*tp_rr  # SL % dari harga (proporsional semua coin)
         sl=entry-sl_d if side=='LONG' else entry+sl_d
         tp=entry+tp_d if side=='LONG' else entry-tp_d

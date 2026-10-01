@@ -1,4 +1,4 @@
-# DEWA Bot — TYPESAFE SNIPER v8.0 (Binance USDⓈ-M Futures 5m)
+# DEWA Bot — TYPESAFE SNIPER v9.0 TRADING GOD (Binance USDⓈ-M Futures 5m)
 
 Bot trading futures Binance TF 5m: **KURIR v7.0** (3 engine preset: FADE CLIMAX /
 SCALP HIGH-MOMENTUM / TREND PULLBACK + HIGHER TF FILTER 15m/1h anti News-Pump-Dump)
@@ -12,6 +12,26 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 
 ---
 
+
+## CHANGELOG v9.0 (1 Okt) - TRADING GOD ENGINE (Super Money Flow + de-clamp + predator persona)
+- DIRECTIVE-CLAMP HANCUR: P36 clamp statis (0.3-3.0%) & P19 range-guard DIHAPUS total — sl_pct
+  murni 100% linear mengikuti Pure ATR (slSuggest). PERINGATAN: jalur tunggal pengaman SL kini =
+  plafon sumber ATR itu sendiri (clamp 0.8-2.4% di market_snapshot) + fallback 1.2%; kalau sumber
+  ATR gagal menghasilkan nilai patologis, TIDAK ada jaring bawah di executor lagi.
+- TRAIL dipercepat (directive): TRAIL_ACT 0.6% -> 0.4%, TRAIL_DIST 0.3% -> 0.2% (.env + example +
+  panel TG). Trail-lock kini aktif mulai +0.4% dan mengunci puncak -0.2%.
+- SUPER MONEY FLOW: dewa_live.smc_btc_volume() (rasio vol 3-bar BTC/SMA20, fail-open None) ->
+  gen_hybrid(btcv=...). Kurir menaikkan kandidat ke grade A jika suntikan vol BTC >= 1.5 saat RSI6
+  kandidat di lembah (<25) / pucuk (>75). Scalp gate volx >= 1.0 saat RSI6 ekstrem (normal 1.2).
+- Fade TIDAK dikecualikan lagi dari data-check HTF (fail-closed semua engine) + veto 1h
+  BEARISH/BULLISH_EXTREME berlaku ke semua. EMA-cross 15m tetap dicabut (v8.0).
+- Persona BOS diganti total verbatim (directive): SYSTEM_IMMUNITY "GOD MINDSET v9.0" +
+  PERSONA_V7 "THE TRADING GOD v9.0" (predator RSI6 lintas-aset + TRAIL-LOCK kilat 0.4%).
+  CATATAN: Host-enforcer FINAL SEAL (kode deterministik: mss-NONE + fade tanpa 3 syarat climax =
+  REJECT) TETAP hidup — guard itu hidup di kode, bukan di persona.
+- test_v7 disesuaikan kontrak v9.0 (persona verbatim baru, fade ikut veto, superflow grade-boost,
+  clamp/P19 musnah, trail 0.004/0.002).
+---
 
 ## CHANGELOG v8.0 (1 Okt) - PURE ATR ADAPTIVE SCALPER (hancurkan SL statis)
 - Directive user: multiplier statis (0.5x/0.67x/1.0x dari SL_PCT) DIHAPUS. SL kini = slSuggest
