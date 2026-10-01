@@ -1,4 +1,4 @@
-# DEWA Bot — TYPESAFE SNIPER v7.3 (Binance USDⓈ-M Futures 5m)
+# DEWA Bot — TYPESAFE SNIPER v8.0 (Binance USDⓈ-M Futures 5m)
 
 Bot trading futures Binance TF 5m: **KURIR v7.0** (3 engine preset: FADE CLIMAX /
 SCALP HIGH-MOMENTUM / TREND PULLBACK + HIGHER TF FILTER 15m/1h anti News-Pump-Dump)
@@ -12,6 +12,20 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 
 ---
 
+
+## CHANGELOG v8.0 (1 Okt) - PURE ATR ADAPTIVE SCALPER (hancurkan SL statis)
+- Directive user: multiplier statis (0.5x/0.67x/1.0x dari SL_PCT) DIHAPUS. SL kini = slSuggest
+  (ATR14x1.5, clamp 0.8-2.4%, unit-fix P36 tetap) sebagai BASIS MUTLAK: TIGHT ×0.75 (TP RR 2.0),
+  NORMAL ×1.0 (RR 2.5), WIDE ×1.30 (RR 2.5). Fallback 1.2% kalau data kosong. Blok P32
+  widening-only (`_sug_f>sl_pct`) dihapus — ATR kini bisa mengetat SEKALIGUS melebarkan.
+- P19 range-guard ditingkatkan: cek SL EFEKTIF (ATR) bukan SL_PCT dasar; SL dipaksa `max(sl_pct, 1.8%)`
+  keluar range 6-jam, RR dijaga ≥2.5.
+- hybrid_rules: EMA-cross 15m DICABUT dari gerbang Anti-Trap (directive: cross EMA telat; bos menilai
+  arah via JSON). Fail-closed None + veto 1h BEARISH/BULLISH_EXTREME TETAP.
+- Kode mati dihapus: TP_RR_CHOP/TP_RR_TREND (dewa_live + .env + .env.example).
+- Trail-lock ACT 0.6% → puncak −0.3% TETAP sebagai jantung pengunci WR.
+- test_v7 69/69 (check v7.3 executor diganti 6 check v8.0; HTF test di-update ke arsitektur v8.0).
+---
 
 ## CHANGELOG v7.3 (1 Okt) - SCALP-LOCK DYNAMIC (mindset bos: predator scalper)
 - Directive user: bos ubah mindset dari swing (nunggu TP 3.5-4%) ke scalper — target realistis TF 5m

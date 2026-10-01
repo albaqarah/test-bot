@@ -48,8 +48,6 @@ FEE=0.0005
 LEV=_cfg('LEVERAGE',10,int)
 MARGIN=_cfg('MARGIN_USD',2.0)/100.0     # env = margin USD beneran ($2 = $2); internal x100
 SL_PCT=_cfg('SL_PCT',0.004)             # SL = % dari harga entry
-TP_RR_TREND=_cfg('TP_RR_TREND',3.0)     # RR saat regime TREND_UP/DOWN
-TP_RR_CHOP=_cfg('TP_RR_CHOP',2.0)       # RR saat regime RANGE (chop sniper)
 TRAIL_ACT=_cfg('TRAIL_ACT',0.003)       # P10b: mulai ngunci profit saat mv >= ini
 TRAIL_DIST=_cfg('TRAIL_DIST',0.002)     # P10b: SL mengunci sejauh ini di belakang ekstrem harga (trailing)
 TRAIL=str(os.environ.get('TRAIL','on')).split('#',1)[0].strip().lower() in ('on','1','true','yes')  # P10b toggle
@@ -494,36 +492,40 @@ def _iterate_inner(once=False):
         # P1 COOLDOWN di titik mutasi (dulu cuma dicek saat scan): anti re-entry 100 detik pasca-SL
         if int(time.time()*1000) < st.get('cooldown',{}).get(cd['sym'],0):
             log({'event':'skip_cooldown','symbol':cd['sym'],'msg':'cooldown aktif (re-check di mutasi)'}); continue
-        # CHOP SNIPER: regime RANGE = TP cepat, hold pendek; TREND = RR panjang
+        # CHOP SNIPER: regime masih dipakai maxhold + notif; SL/TP kini PURE ATR (v8.0)
         regime=cd.get('regime','RANGE')
-        tp_rr=TP_RR_CHOP if regime=='RANGE' else TP_RR_TREND
         sl_pct=SL_PCT
         # P11: BOS YANG MIKIRIN SL/TP (varian eksekusi dari jev) — guard tetap ketat:
         variant=str(d.get('variant','')).upper() if isinstance(d,dict) else ''
-        # v7.3 SCALP-LOCK DYNAMIC (user patch): target scalping realistis TF 5m selaras
-        # TRAIL-LOCK (ACT 0.6%): TIGHT SL 0.6%/TP 1.5%, NORMAL SL 0.8%/TP 2.0%, WIDE SL 1.2%/TP 3.0% — semua RR 1:2.5.
-        if variant=='TIGHT':   sl_pct, tp_rr = SL_PCT*0.5, 2.5    # SL 0.6%, TP 1.5% (RR 1:2.5)
-        elif variant=='NORMAL': sl_pct, tp_rr = SL_PCT*0.67, 2.5  # SL 0.8%, TP 2.0% (RR 1:2.5)
-        elif variant=='WIDE':  sl_pct, tp_rr = SL_PCT, 2.5        # SL 1.2%, TP 3.0% (RR 1:2.5)
-        # P32 ATR-SL (skill #1 vault — obat 1 SL = 6.6 win): SL mengikuti volatilitas riil.
-        # slSuggest dari market_snapshot (ATR14 x 1.5, clamp 0.8-2.4%). Bos tetap bisa override
-        # via varian WIDE/TIGHT; ATR hanya NAIK-in SL minimum kalau pasar ganas, dan:
-        _P32_ATR_SL=os.environ.get('P32_ATR_SL','1')=='1'
-        if _P32_ATR_SL:
-            try:
-                _ss=((cd.get('brief') or {}).get('slSuggest') or {})
-                _sug=float(_ss.get('sl_pct_suggest') or 0)
-                # P36 UNIT-FIX (bug WLD 29 Sep): sl_pct_suggest = PERSEN (0.8-2.4, dst dr
-                # market_snapshot), sl_pct internal = FRAKSI (0.012 = 1.2%). Dulu _sug
-                # langsung dipakai sbg fraksi -> 2.08 terbaca 208% -> SL -0.5586 / TP 4.82 absurs.
-                _sug_f=_sug/100.0
-                if _sug_f>sl_pct and variant!='TIGHT':
-                    sl_pct=_sug_f  # ATR lebih lebar dari pilihan bos -> ikut ATR (anti SL ketat di pasar wick)
-                tp_rr=max(tp_rr, 2.5)  # RR minimum dijaga
-                if _sug_f and abs(sl_pct-_sug_f)<1e-9 and variant in ('','NORMAL'):
-                    log({'event':'atr_sl','symbol':cd['sym'],'atr_suggest':_sug,
-                         'msg':'SL mengikuti ATR14x1.5 (P32)'})
-            except Exception: pass
+        # === ERA BARU v8.0: PURE ATR ADAPTIVE SCALPER (directive user 1 Okt) ===
+        # Multiplier statis (0.5x/0.67x/1.0x dari SL_PCT) DIHAPUS — SL/TP mengikuti
+        # volatilitas riil koin via slSuggest (ATR14x1.5, clamp 0.8-2.4%, unit PERSEN
+        # -> fraksi, unit-fix P36 tetap berlaku). Varian bos = modifikasi agresivitas ruang ATR.
+        _ss={}
+        try:
+            _ss=(cd.get('brief') or {}).get('slSuggest') or {}
+            _atr_f = float(_ss.get('sl_pct_suggest') or 1.2) / 100.0  # Konversi persen ke fraksi
+        except Exception:
+            _atr_f = 0.012  # Fallback 1.2% jika data kosong
+
+        # Varian Bos Jev bertugas memodifikasi agresivitas ruang ATR secara adaptif:
+        if variant == 'TIGHT':
+            sl_pct = _atr_f * 0.75  # Mengetatkan ruang ATR sebesar 25% untuk market agresif
+            tp_rr = 2.0             # Target TP sangat dekat, kejar eksekusi cepat
+        elif variant == 'WIDE':
+            sl_pct = _atr_f * 1.30  # Melebarkan ruang ATR sebesar 30% jika wick sedang mengamuk
+            tp_rr = 2.5
+        else:  # NORMAL atau Kosong
+            sl_pct = _atr_f         # Ikut 100% volatilitas riil ATR koin bersangkutan (PAS DAN ADIL)
+            tp_rr = 2.5             # Konsisten dengan target Scalp-Lock v7.3
+        try:
+            if _ss.get('sl_pct_suggest'):
+                _mult={'TIGHT':0.75,'WIDE':1.30}.get(variant,1.0)
+                log({'event':'atr_sl','symbol':cd['sym'],'atr_suggest':float(_ss.get('sl_pct_suggest')),
+                     'msg':f'SL = ATR14x1.5 x{_mult} (v8.0 PURE ATR)'})
+        except Exception: pass
+        # (P32 ATR-SL lama DIGABUNG ke blok v8.0 di atas — ATR kini basis utama SL,
+        # bukan widening-only; blok _sug_f>sl_pct DIHAPUS per directive v8.0.)
         # P19 RANGE-POSITION GUARD: SL yang jatuh DI DALAM range 6 jam (72 bar) gampang kena noise/wick.
         # Kasus RUNE 25 Sep 08:01 WIB: LONG @0.6402, SL 1.2% = 0.6325 — cuma 0.06% di atas low range
         # 0.6319 → wick ke low range aja cukup memotong (dan benar terjadi). Solusi: kalau level SL
@@ -538,14 +540,17 @@ def _iterate_inner(once=False):
                 _pos=(entry-_lo)/(_hi-_lo)
                 # SL efektif berada DI DALAM range = pasti bisa kena noise range biasa (kasus RUNE:
                 # SL 0.6325 > low 0.6319 — cukup wick ke low range untuk memotong).
-                _sl_in_range = entry*(1-SL_PCT) > _lo if side=='LONG' else entry*(1+SL_PCT) < _hi
+                _sl_eff = entry*(1-sl_pct) if side=='LONG' else entry*(1+sl_pct)
+                _sl_in_range = _sl_eff > _lo if side=='LONG' else _sl_eff < _hi
                 if side=='LONG' and _sl_in_range and variant!='WIDE':
-                    sl_pct, tp_rr = SL_PCT*1.5, 2.5   # P19 guard: SL keluar range (1.8%), RR ikut v7.3 scalp-lock
+                    sl_pct = max(sl_pct, SL_PCT*1.5)   # P19 guard: SL dipaksa keluar range 6-jam
+                    tp_rr = max(tp_rr, 2.5)            # RR dijaga minimal scalp-lock
                     log({'event':'range_guard_wide','symbol':cd['sym'],'side':side,
                          'pos_in_range':round(_pos,2),'range_hi':_hi,'range_lo':_lo,
                          'msg':'LONG deket resistance 6-jam — SL di-WIDE-in'})
-                elif side=='SHORT' and entry*(1+SL_PCT) < _hi and variant!='WIDE':
-                    sl_pct, tp_rr = SL_PCT*1.5, 2.5   # P19 guard: SL keluar range (1.8%), RR ikut v7.3 scalp-lock
+                elif side=='SHORT' and _sl_in_range and variant!='WIDE':
+                    sl_pct = max(sl_pct, SL_PCT*1.5)   # P19 guard: SL dipaksa keluar range 6-jam
+                    tp_rr = max(tp_rr, 2.5)            # RR dijaga minimal scalp-lock
                     log({'event':'range_guard_wide','symbol':cd['sym'],'side':side,
                          'pos_in_range':round(_pos,2),'range_hi':_hi,'range_lo':_lo,
                          'msg':'SHORT deket support 6-jam — SL di-WIDE-in'})

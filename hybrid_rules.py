@@ -184,10 +184,9 @@ def gen_hybrid(kk, rs, zz, vsma, htf15, htf1h_struct, extra_engines=None, cek_1h
             m = htf15[i] if i < len(htf15) else None
             if m is None:
                 ok = False          # fail-closed: gak bisa validasi = gak boleh tembak
-            else:
-                e20, e50 = m
-                if side == 'L' and not (e20 > e50): ok = False
-                if side == 'S' and not (e20 < e50): ok = False
+            # v8.0 (directive user): EMA-cross 15m DICABUT dari gerbang kurir — cross EMA
+            # selalu telat; bos Jev menilai arah lewat data JSON (HTF + MSS + money-flow).
+            # Kurir cukup memastikan data HTF ADA (fail-closed None tetap).
             if cek_1h:
                 st = str(htf1h_struct)
                 if side == 'L' and 'BEARISH_EXTREME' in st: ok = False
