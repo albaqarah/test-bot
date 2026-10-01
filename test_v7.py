@@ -206,6 +206,11 @@ _exp=os.path.join(os.path.dirname(os.path.abspath(__file__)),'.env.example')
 if not os.path.exists(_exp): _exp=os.path.join(os.path.dirname(os.path.abspath(__file__)),'test-bot','.env.example')
 _ex=open(_exp).read()
 check('v9.0 TRAIL_ACT 0.004 / TRAIL_DIST 0.002 (.env.example)', 'TRAIL_ACT=0.004' in _ex and 'TRAIL_DIST=0.002' in _ex)
+# ---------- 5d. v10.0 PURE UNCLAMPED ATR (kurir bebas clamp) ----------
+_ms=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'market_snapshot.py')).read()
+check('v10.0 kurir: clamp 0.8-2.4% MUSNAH (sl_pct = 1.5xATR murni)', 'max(0.8,min(2.4' not in _ms and "sl_pct=1.5*m['atr_pct']" in _ms)
+check('v10.0 kurir: floor teknis pasar mati (sl_pct<0.20 -> 0.25)', 'if sl_pct<0.20: sl_pct=0.25' in _ms)
+check('v10.0 executor: fallback 1.2% cuma utk data kosong (tetap)', '_atr_f = float(_ss.get(\'sl_pct_suggest\') or 1.2) / 100.0' in _t)
 
 # ---------- 6. PAYLOAD KONTRAK v7 ----------
 ds.btc_bias=lambda: {'bias':'UP','b5':'UP','b1':'UP'}

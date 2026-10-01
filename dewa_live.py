@@ -3,7 +3,7 @@
 dewa_live.py — BOT LIVE FINAL v7.0 (dry-run mode default: eksekusi virtual).
 Pipeline v7.0: Data -> KURIR v7 (3 engine preset + HIGHER TF FILTER) -> payload JSON
 -> BOS jev persona v7.0 (pipeline P1-P8, tanpa rubric) -> Risk gate (max 5 posisi)
--> Eksekusi virtual (SL/TP varian + clamp) -> Janitor SL/TP + trail-lock P10b.
+-> Eksekusi virtual (SL/TP varian, ATR murni v10.0) -> Janitor SL/TP + trail-lock P10b.
 
 Usage: python3 dewa_live.py --pairs ALL --once   (1 iterasi, untuk cron)
        python3 dewa_live.py --pairs ALL          (loop terus)
@@ -512,7 +512,7 @@ def _iterate_inner(once=False):
         variant=str(d.get('variant','')).upper() if isinstance(d,dict) else ''
         # === ERA BARU v8.0: PURE ATR ADAPTIVE SCALPER (directive user 1 Okt) ===
         # Multiplier statis (0.5x/0.67x/1.0x dari SL_PCT) DIHAPUS — SL/TP mengikuti
-        # volatilitas riil koin via slSuggest (ATR14x1.5, clamp 0.8-2.4%, unit PERSEN
+        # volatilitas riil koin via slSuggest (ATR14x1.5 MURNI tanpa clamp, v10.0; unit PERSEN
         # -> fraksi, unit-fix P36 tetap berlaku). Varian bos = modifikasi agresivitas ruang ATR.
         _ss={}
         try:

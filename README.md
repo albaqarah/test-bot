@@ -13,6 +13,18 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 ---
 
 
+## CHANGELOG v10.0 (1 Okt) - THE FINAL SCALPER GOD (Pure Unclamped ATR di Kurir)
+- Clamp sumber DIBONGKAR (directive): market_snapshot.py — `sl_pct = 1.5*atr_pct` murni 100%
+  linear, TANPA max(0.8)/min(2.4). Kasus pemicu: JUP (ATR 0.401% -> murni 0.60%) & DOGE
+  (ATR 0.266% -> murni 0.40%) tadinya di-floor ke 0.8% statis.
+- Fallback aman TEKNIS: sl_pct < 0.20% (pasar mati total) -> floor absolut 0.25% (filter
+  lot-size exchange). Bukan jaring pengaman strategi.
+- Efek berantai: TP = SL x RR (2.0-2.5) ikut mengecil -> target copet lebih dekat, Trail-Lock
+  0.4% lebih sering nyampe sebelum retrace (argumen arsitek).
+- Executor & bos TIDAK berubah (sudah murni ATR sejak v8.0/v9.0) — hanya sumbernya yang dibebas.
+- test_v7 +3 check (5d): clamp musnah, floor 0.25, fallback 1.2% data-kosong tetap.
+---
+
 ## CHANGELOG v9.0 (1 Okt) - TRADING GOD ENGINE (Super Money Flow + de-clamp + predator persona)
 - DIRECTIVE-CLAMP HANCUR: P36 clamp statis (0.3-3.0%) & P19 range-guard DIHAPUS total — sl_pct
   murni 100% linear mengikuti Pure ATR (slSuggest). PERINGATAN: jalur tunggal pengaman SL kini =

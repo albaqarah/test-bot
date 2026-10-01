@@ -302,7 +302,13 @@ def enrich_market(brief, sym, kk, rs=None, i=None):
         m={}
         a=atr14(kk,i); m['atr_pct']=round(a/c*100,3) if (a and c>0) else None
         if m['atr_pct']:
-            sl_pct=max(0.8,min(2.4,1.5*m['atr_pct']))
+            # === ERA MAHA DEWA v10.0: PURE UNCLAMPED ATR ENGINE (directive 1 Okt) ===
+            # Clamp 0.8-2.4% DIBONGKAR total — sl_pct murni 100% linear mengikuti volatilitas
+            # asli koin (DOGE ATR 0.27% -> SL 0.40%, JUP 0.40% -> SL 0.60%; bukan lagi 0.8% statis).
+            sl_pct=1.5*m['atr_pct']
+            # Fallback aman TEKNIS (bukan jaring pengaman strategi): pasar mati total ->
+            # SL < 0.20% dinaikkan ke 0.25% biar filter lot-size exchange gak menolak order.
+            if sl_pct<0.20: sl_pct=0.25
             brief['slSuggest']={'method':'ATR14x1.5','atr_pct':m['atr_pct'],'sl_pct_suggest':round(sl_pct,2)}
         vw=vwap_sigma(kk,i)
         if vw: m['vwap'],m['vwap_sigma'],m['vwap_z']=vw
