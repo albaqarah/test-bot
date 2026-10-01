@@ -1,4 +1,4 @@
-# DEWA Bot — TYPESAFE SNIPER v7.2.2 (Binance USDⓈ-M Futures 5m)
+# DEWA Bot — TYPESAFE SNIPER v7.3 (Binance USDⓈ-M Futures 5m)
 
 Bot trading futures Binance TF 5m: **KURIR v7.0** (3 engine preset: FADE CLIMAX /
 SCALP HIGH-MOMENTUM / TREND PULLBACK + HIGHER TF FILTER 15m/1h anti News-Pump-Dump)
@@ -12,6 +12,19 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 
 ---
 
+
+## CHANGELOG v7.3 (1 Okt) - SCALP-LOCK DYNAMIC (mindset bos: predator scalper)
+- Directive user: bos ubah mindset dari swing (nunggu TP 3.5-4%) ke scalper — target realistis TF 5m
+  selaras TRAIL-LOCK (ACT 0.6%): TIGHT SL 0.6%/TP 1.5% · NORMAL SL 0.8%/TP 2.0% · WIDE SL 1.2%/TP 3.0%,
+  SEMUA RR 1:2.5.
+- Eksekusi 3 lapis: (1) CRITERIA jev_bridge (teks keputusan bos), (2) persona P7 + instruksi kaku
+  SCALP-LOCK (gerak valid 0.6-1.5% di chop sesepi apa pun = WAJIB CONFIRMED_NORMAL/TIGHT), (3) map
+  eksekutor dewa_live (TIGHT 0.5x/NORMAL 0.67x/WIDE 1.0x dari SL_PCT 1.2%, RR semua 2.5) + P19 guard
+  ikut RR 2.5 — doc-vs-code gap dicegah: angka eksekusi = angka yang dijanjikan ke bos.
+- Guard yang TETAP: anti-chase 3.0 ATR, FINAL SEAL + ATR barrier 0.25, ratio-lock fade v7.2.2,
+  P32 ATR widen, P19 range-guard, clamp P36 0.3-3%.
+- test_v7 69/69 (6 check baru v7.3).
+---
 
 ## CHANGELOG v7.2.2 (1 Okt) - RATIO LOCK (seal escape hatch pengecualian fade)
 - Host-enforcer jev_bridge: pengecualian fade atas MSS-NONE kini 3 SYARAT KUMULATIF (directive user):

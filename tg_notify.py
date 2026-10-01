@@ -165,13 +165,13 @@ def _regime_line():
 # ---------- START / STOP / RESTART ----------
 def fmt_start(saldo, n_open=0, maxpos=5, n_pair=41):
     r=_resume24()
-    return (f"🟢 <b>BOT START · TYPESAFE SNIPER v7.2.2</b>" + NL + DIV
+    return (f"🟢 <b>BOT START · TYPESAFE SNIPER v7.3</b>" + NL + DIV
         + NL + f"🧾 Mode      {_mode_line()}"
         + NL + _equity(saldo)
         + NL + "💵 Margin    $2.00/trade · notional $20.00"
         + NL + f"🎟️ Slot      {maxpos} · 1 posisi/pair · cd 30m"
         + NL + "🪙 Pair      41 (38 crypto + 3 logam + PAXG)"
-        + NL + "🎯 TP/SL     SL 0.8–1.8% (P7 bos) · TP 2.5–4R · clamp 0.3–3%"
+        + NL + "🎯 TP/SL     SL 0.6–1.2% (P7 bos v7.3) · TP 1.5–3.0% · RR 1:2.5 · clamp 0.3–3%"
         + NL + "🛡️ BE        TRAIL aktif: kunci +0.6% → puncak −0.3%"
         + NL + _tradfi_line()
         + NL + _bos_line()

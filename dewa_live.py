@@ -500,8 +500,11 @@ def _iterate_inner(once=False):
         sl_pct=SL_PCT
         # P11: BOS YANG MIKIRIN SL/TP (varian eksekusi dari jev) — guard tetap ketat:
         variant=str(d.get('variant','')).upper() if isinstance(d,dict) else ''
-        if variant=='TIGHT':   sl_pct, tp_rr = SL_PCT*0.67, 2.5   # momentum jelas: SL 0.8%, TP 1:2.5
-        elif variant=='WIDE':  sl_pct, tp_rr = SL_PCT*1.5, 4.0    # wick besar: SL 1.8%, TP 1:4 (di balik struktur)
+        # v7.3 SCALP-LOCK DYNAMIC (user patch): target scalping realistis TF 5m selaras
+        # TRAIL-LOCK (ACT 0.6%): TIGHT SL 0.6%/TP 1.5%, NORMAL SL 0.8%/TP 2.0%, WIDE SL 1.2%/TP 3.0% — semua RR 1:2.5.
+        if variant=='TIGHT':   sl_pct, tp_rr = SL_PCT*0.5, 2.5    # SL 0.6%, TP 1.5% (RR 1:2.5)
+        elif variant=='NORMAL': sl_pct, tp_rr = SL_PCT*0.67, 2.5  # SL 0.8%, TP 2.0% (RR 1:2.5)
+        elif variant=='WIDE':  sl_pct, tp_rr = SL_PCT, 2.5        # SL 1.2%, TP 3.0% (RR 1:2.5)
         # P32 ATR-SL (skill #1 vault — obat 1 SL = 6.6 win): SL mengikuti volatilitas riil.
         # slSuggest dari market_snapshot (ATR14 x 1.5, clamp 0.8-2.4%). Bos tetap bisa override
         # via varian WIDE/TIGHT; ATR hanya NAIK-in SL minimum kalau pasar ganas, dan:
@@ -537,12 +540,12 @@ def _iterate_inner(once=False):
                 # SL 0.6325 > low 0.6319 — cukup wick ke low range untuk memotong).
                 _sl_in_range = entry*(1-SL_PCT) > _lo if side=='LONG' else entry*(1+SL_PCT) < _hi
                 if side=='LONG' and _sl_in_range and variant!='WIDE':
-                    sl_pct, tp_rr = SL_PCT*1.5, 4.0
+                    sl_pct, tp_rr = SL_PCT*1.5, 2.5   # P19 guard: SL keluar range (1.8%), RR ikut v7.3 scalp-lock
                     log({'event':'range_guard_wide','symbol':cd['sym'],'side':side,
                          'pos_in_range':round(_pos,2),'range_hi':_hi,'range_lo':_lo,
                          'msg':'LONG deket resistance 6-jam — SL di-WIDE-in'})
                 elif side=='SHORT' and entry*(1+SL_PCT) < _hi and variant!='WIDE':
-                    sl_pct, tp_rr = SL_PCT*1.5, 4.0
+                    sl_pct, tp_rr = SL_PCT*1.5, 2.5   # P19 guard: SL keluar range (1.8%), RR ikut v7.3 scalp-lock
                     log({'event':'range_guard_wide','symbol':cd['sym'],'side':side,
                          'pos_in_range':round(_pos,2),'range_hi':_hi,'range_lo':_lo,
                          'msg':'SHORT deket support 6-jam — SL di-WIDE-in'})

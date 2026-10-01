@@ -59,14 +59,14 @@ P4 [MARKET STRUCTURE SHIFT] : Validasi pembalikan arah. MSS sah HANYA jika ada b
 P5 [FVG MAGNET CHECK] : Cari celah Fair Value Gap. Jika FVG terdeteksi, tandai harganya. Sinyal terbaik adalah menunggu retrace ke area FVG. Jika tidak ada FVG, kurangi tingkat keyakinan, tapi jangan langsung di-reject jika volume_x tinggi.
    [PATCH v7.1 - ANTI-CHASE COMPILER GUARD] Jika data metrics menyatakan jarak entry > 3.0 ATR dari swing structure (entryStatus: CHASE, atrDistance > 3.0), kamu DILARANG MERESPON dengan CONFIRMED_NORMAL atau CONFIRMED_WIDE. Kamu WAJIB menurunkan keputusan menjadi REJECT dan memberikan catatan eksekusi: "WAIT_FOR_RETRACE_TO_FVG" — tunggu harga mendingin (retrace) ke dalam Fair Value Gap dulu.
 P6 [WICK EXTREME GUARD] : Jika RSI6 > 85/90 (Pucuk), dilarang keras membuka posisi LONG searah wick kecuali terjadi Liquidity Sweep yang terkonfirmasi MSS Balik Arah (Siap SHORT). Berlaku kebalikannya untuk RSI6 < 15/10.
-P7 [DYNAMIC RISK ESTIMATION] : Tentukan penempatan Stop Loss aman. Dilarang menggunakan SL buta 0.8% jika volatilitas/wick sedang ganas. SL wajib diletakkan di luar swing low/high struktur terdekat.
+P7 [DYNAMIC RISK ESTIMATION] : Tentukan penempatan Stop Loss aman. Dilarang menggunakan SL buta 0.6% jika volatilitas/wick sedang ganas. SL wajib diletakkan di luar swing low/high struktur terdekat. [PATCH v7.3 - SCALP-LOCK DYNAMIC] Ingat bahwa sistem eksekutor didukung oleh TRAIL-LOCK AKTIF yang mengunci profit pada kenaikan >= 0.6%. Oleh karena itu, dalam kondisi market RANGE/CHOP sesepi apa pun, jika arah pergerakan 5 menit ke depan valid naik/turun minimal 0.6% - 1.5%, kamu WAJIB mengeluarkan keputusan CONFIRMED_NORMAL/TIGHT. Jangan menolak sinyal hanya karena target jangka panjangnya jauh.
 P8 [CONFIDENCE EVALUATION] : Hitung total bobot keyakinan: RSI & Volume (50%) + Makro/MSS/HTF (50%). Jika total nilai logika dirasa ragu atau skor kalkulasi internal < 0.55 -> Keputusan WAJIB = REJECT."""
 
 # ===================== CRITERIA 4 OPSI (kontrak v7.0) =====================
 CRITERIA={
- "CONFIRMED_TIGHT":  "EXECUTE presisi AGGRESSIVE: pipeline 1-8 semua selarah, arah 100% akurat, volatilitas terkendali, wick tipis. SL ketat 0.8%, TP 1:2.5.",
- "CONFIRMED_NORMAL": "EXECUTE standar STANDARD: arah akurat didukung money-flow ATAU MSS searah, struktur mikro sehat. SL 1.2%, TP 1:3.5.",
- "CONFIRMED_WIDE":   "EXECUTE CONSERVATIVE: arah benar tapi wick/likuiditas ganas — SL di luar struktur 1.8%, TP 1:4. Ukuran risiko nominal dikecilkan.",
+ "CONFIRMED_TIGHT":  "EXECUTE presisi AGGRESSIVE: pipeline 1-8 semua selarah, arah 100% akurat, volatilitas terkendali, wick tipis. SL ketat 0.6%, TP 1.5% (RR 1:2.5).",
+ "CONFIRMED_NORMAL": "EXECUTE standar STANDARD: arah akurat didukung money-flow ATAU MSS searah, struktur mikro sehat. SL 0.8%, TP 2.0% (RR 1:2.5).",
+ "CONFIRMED_WIDE":   "EXECUTE CONSERVATIVE: arah benar tapi wick/likuiditas ganas — SL di luar struktur 1.2%, TP 3.0% (RR 1:2.5). Ukuran risiko nominal dikecilkan.",
  "REJECT":           "Layak ditolak: arah belum 100% akurat / melawan money-flow tanpa MSS / melakukan CHASE > 3.0 ATR dari swing structure (WAJIB WAIT_FOR_RETRACE_TO_FVG) / MISSING_STRUCTURE_CONFIRMATION (mss NONE tanpa pengecualian fade) / INVALID_FADE_NO_CLIMAX_VOLUME (pengecualian fade gugur: butuh RSI6 ekstrem + volx >= 1.2 + wick_ratio_pct >= 40% bersamaan) / P8 internal < 0.55 / menabrak dinding HTF.",
 }
 

@@ -164,6 +164,16 @@ r=jb.call_jev({'symbol':'ADAUSDT','side':'LONG','mss':'MSS_BULLISH','engine':'tr
 check('v7.2 mss ada -> CONFIRMED utuh', r['decision']=='CONFIRMED', str(r))
 jb._req=_orig
 
+# ---------- 5b. v7.3 SCALP-LOCK DYNAMIC ----------
+check('v7.3 CRITERIA TIGHT scalp (SL 0.6%/TP 1.5%, RR 1:2.5)', '0.6%' in jb.CRITERIA['CONFIRMED_TIGHT'] and '1.5%' in jb.CRITERIA['CONFIRMED_TIGHT'] and '1:2.5' in jb.CRITERIA['CONFIRMED_TIGHT'])
+check('v7.3 CRITERIA NORMAL scalp (SL 0.8%/TP 2.0%)', '0.8%' in jb.CRITERIA['CONFIRMED_NORMAL'] and '2.0%' in jb.CRITERIA['CONFIRMED_NORMAL'])
+check('v7.3 CRITERIA WIDE scalp (SL 1.2%/TP 3.0%)', '1.2%' in jb.CRITERIA['CONFIRMED_WIDE'] and '3.0%' in jb.CRITERIA['CONFIRMED_WIDE'])
+check('v7.3 persona P7 SCALP-LOCK + TRAIL-LOCK >= 0.6%', 'SCALP-LOCK DYNAMIC' in jb.PERSONA_V7 and 'TRAIL-LOCK' in jb.PERSONA_V7 and '>= 0.6%' in jb.PERSONA_V7)
+_t=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'dewa_live.py')).read()
+_t=re.sub(r'"""[\s\S]*?"""', ' ', _t); _t=re.sub(r'#.*', '', _t)
+check('v7.3 executor: angka TP lama (RR 4.0) musnah', '1.5, 4.0' not in _t)
+check('v7.3 executor map TIGHT 0.5/NORMAL 0.67/WIDE 1.0 — RR semua 2.5', 'SL_PCT*0.5, 2.5' in _t and 'SL_PCT*0.67, 2.5' in _t and 'SL_PCT, 2.5' in _t)
+
 # ---------- 6. PAYLOAD KONTRAK v7 ----------
 ds.btc_bias=lambda: {'bias':'UP','b5':'UP','b1':'UP'}
 kk=base_kk(600)
