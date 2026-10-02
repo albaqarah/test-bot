@@ -159,7 +159,7 @@ jb._req=lambda p: {'answers':{'decision':{'choice':'REJECT','probabilities':{'RE
 r=jb.call_jev({'symbol':'XAUUSDT','side':'SHORT'})
 check('REJECT sah dgn prob', r['decision']=='REJECT' and r['probs'].get('REJECT')==0.9, str(r))
 jb._req=_orig
-check('v9.0 persona verbatim (THE TRADING GOD + GOD MINDSET)', 'GOD MINDSET v9.0' in jb.SYSTEM_IMMUNITY and 'THE TRADING GOD v9.0' in jb.PERSONA_V7 and 'RSI6 > 80' in jb.PERSONA_V7 and '0.4%' in jb.PERSONA_V7)
+check('v12.0 persona verbatim (THE TRUE SCALPER GOD + GOD MINDSET v12.0)', 'GOD MINDSET v12.0' in jb.SYSTEM_IMMUNITY and 'THE TRUE SCALPER GOD v12.0' in jb.PERSONA_V7 and 'SCALPER sungguhan' in jb.SYSTEM_IMMUNITY)
 check('criteria 4 opsi', list(jb.CRITERIA)==['CONFIRMED_TIGHT','CONFIRMED_NORMAL','CONFIRMED_WIDE','REJECT'])
 # v7.1 ANTI-CHASE COMPILER GUARD
 # v9.0: persona diganti verbatim (directive) — guard anti-chase tinggal di CRITERIA/kode enforcer
@@ -168,7 +168,7 @@ check('v7.2.2 FINAL-SEAL fade 3-syarat di KODE enforcer (bukan cuma persona)', '
 check('v7.1 REJECT criteria sebut CHASE', 'CHASE' in jb.CRITERIA['REJECT'] and 'WAIT_FOR_RETRACE_TO_FVG' in jb.CRITERIA['REJECT'])
 # v7.2 FINAL SEAL: HARD RULE MSS
 # v9.0: FINAL SEAL bukan lagi di persona — persona predator + seal tetap di kode
-check('v9.0 persona predator RSI6 lintas-aset (SHORT >80 / LONG <20) verbatim', 'RSI6 > 80' in jb.PERSONA_V7 and 'RSI6 < 20' in jb.PERSONA_V7)
+check('v12.0 persona lensa lembah/pucuk RSI6 (<= 20 LEMBAH / >= 80 PUCUK) verbatim', 'metrics.rsi6Realtime' in jb.PERSONA_V7 and 'LEMBAH' in jb.PERSONA_V7 and 'PUCUK' in jb.PERSONA_V7)
 check('v7.2 REJECT criteria sebut MISSING_STRUCTURE', 'MISSING_STRUCTURE_CONFIRMATION' in jb.CRITERIA['REJECT'])
 jb._req=lambda p: {'answers':{'decision':{'choice':'CONFIRMED_NORMAL','probabilities':{'CONFIRMED_NORMAL':0.9},'confidence':0.9}}}
 r=jb.call_jev({'symbol':'INJUSDT','side':'LONG','mss':'NONE','engine':'scalp'})
@@ -190,8 +190,8 @@ check('v7.2 mss ada -> CONFIRMED utuh', r['decision']=='CONFIRMED', str(r))
 jb._req=_orig
 
 # ---------- 5b. v8.0 PURE ATR ADAPTIVE SCALPER ----------
-check('v8.0 CRITERIA TIGHT scalp (SL 0.6%/TP 1.5%)', '0.6%' in jb.CRITERIA['CONFIRMED_TIGHT'] and '1.5%' in jb.CRITERIA['CONFIRMED_TIGHT'])
-check('v9.0 persona TRAIL-LOCK kilat 0.4% (predator rule 2)', 'TRAIL-LOCK' in jb.PERSONA_V7 and '0.4%' in jb.PERSONA_V7 and 'Dilarang pelit' in jb.PERSONA_V7)
+check('v12.0 CRITERIA: angka fiksi & P8 hantu musnah, TP band disebut milik eksekutor', '0.6%' not in jb.CRITERIA['CONFIRMED_TIGHT'] and 'P8 internal' not in ''.join(jb.CRITERIA.values()) and 'pipeline 1-8' not in ''.join(jb.CRITERIA.values()) and 'eksekutor yang menyesuaikan' in jb.CRITERIA['CONFIRMED_WIDE'])
+check('v12.0 persona anti-fakeout (closePos 50 = leleh, FAKEOUT REJECT) verbatim', 'closePos dekat 50' in jb.PERSONA_V7 and 'FAKEOUT' in jb.PERSONA_V7 and 'retracePct' in jb.PERSONA_V7)
 _t=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'dewa_live.py')).read()
 _t=re.sub(r'"""[\s\S]*?"""', ' ', _t); _t=re.sub(r'#.*', '', _t)
 check('v8.0 executor: multiplier statis musnah', 'SL_PCT*0.5' not in _t and 'SL_PCT*0.67' not in _t and 'SL_PCT*1.5, 2.5' not in _t)
@@ -212,12 +212,12 @@ check('v10.0 kurir: clamp 0.8-2.4% MUSNAH (sl_pct = 1.5xATR murni)', 'max(0.8,mi
 check('v10.0 kurir: floor teknis pasar mati (sl_pct<0.20 -> 0.25)', 'if sl_pct<0.20: sl_pct=0.25' in _ms)
 check('v10.0 executor: fallback 1.2% cuma utk data kosong (tetap)', '_atr_f = float(_ss.get(\'sl_pct_suggest\') or 1.2) / 100.0' in _t)
 # ---------- 5e. v10.1 ARCHITECTURE RE-ALIGNMENT ----------
-check('v10.1 instruksi P1-P8 diganti PURE ATR + SUPERFLOW (verbatim)', 'Jalankan analisis penentuan arah secara internal' in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'jev_bridge.py')).read()
-      and 'Jalankan pipeline P1-P8' not in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'jev_bridge.py')).read())
+check('v12.0 instruksi bos = lensa anti-fakeout + lembah/pucuk (instruksi v10.1 musnah)', 'lensa anti-fakeout' in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'jev_bridge.py')).read()
+      and 'Jalankan analisis penentuan arah' not in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'jev_bridge.py')).read())
 check('v10.1 docstring stale pipeline_log musnah (jev_bridge)', 'pipeline_log' not in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'jev_bridge.py')).read())
 # ---------- 5f. v10.1.1 FINAL POLISH (branding) ----------
 _tg=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'tg_notify.py')).read()
-check('v11.0 panel BOT START = TYPESAFE SNIPER v11.0 PRE-EMPTIVE', 'TYPESAFE SNIPER v11.0 PRE-EMPTIVE' in _tg and 'SOVEREIGN' not in _tg.split('TYPESAFE SNIPER')[1][:60])
+check('v12.0 panel BOT START = TYPESAFE SNIPER v12.0 TRUE SCALPER', 'TYPESAFE SNIPER v12.0 TRUE SCALPER' in _tg and 'PRE-EMPTIVE' not in _tg.split('TYPESAFE SNIPER')[1][:60])
 check('v10.1.1 label P1→P8 musnah, ganti ANALISA v10.1', 'P1→P8' not in _tg and 'ANALISA · PURE ATR' in _tg and 'SUPER MONEY FLOW' in _tg)
 # ---------- 5g. v11.0 PRE-EMPTIVE PREDATOR ----------
 check('v11.0 kurir: PRE-EMPTIVE PEAK DETECTOR di gen_hybrid', '_preemptive' in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'hybrid_rules.py')).read()
@@ -245,6 +245,33 @@ check('v11.0 seal tetap: grade A + fade non-ekstrem + mss NONE -> REJECT', _r2['
 _hrsrc=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'hybrid_rules.py')).read()
 check('v11.0 wiring: gen_hybrid tanpa slot mati extra_engines + dipanggil dgn btcv=btcv', 'extra_engines' not in _hrsrc
       and 'gen_hybrid(kk,rs,zz,vsma,htf15,maps[\'1h_struct\'],btcv=btcv)' in _t)
+# ---------- 5h. v12.0 TRUE SCALPER GOD ----------
+_tsk=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'dewa_skill.py')).read()
+check('v12.0 kurir: anti-fakeout lens di payload (closePos/retracePct/bbTouch/consec/candleAna)',
+      all(k in _tsk for k in ('candleAna','closePos','consec','retracePct','bbTouch')))
+check('v12.0 executor: TP BAND 0.6-1.5% kontrak (SL ATR murni gak disentuh)',
+      'if tp_pct<0.006: tp_d=entry*0.006' in _t and 'elif tp_pct>0.015: tp_d=entry*0.015' in _t
+      and 'sl_pct = _atr_f * 0.50' in _t and 'max(0.003' not in _t and 'min(0.030' not in _t)
+check('v12.0 executor: log atr_sl mult TIGHT 0.50 sinkron kenyataan',
+      "{'TIGHT':0.50," in _t and "{'TIGHT':0.75," not in _t)
+def _mkser():
+    # i=len(kk)-2 -> bar event = index 58 (bar closed terakhir); index 59 cuma filler
+    ser=[[k*300000, 99+(0.02 if k%2 else -0.02), 99.03, 98.97, 99+(0.02 if k%2 else -0.02), 10.0] for k in range(60)]
+    ser[58]=[58*300000, 99.0, 101.0, 98.0, 100.6, 10.0]      # bar closed: close dekat high
+    return ser
+_m=ds.build_payload_v7('X',_mkser(),'SHORT','A','fade','RANGE',0.0,{'15m':{},'1h':{}})
+check('v12.0 perilaku kurir: lens menghitung benar (SHORT, closePos 86.7, BB upper, retrace>0)',
+      abs(_m['metrics']['closePos']-86.7)<0.5 and _m['metrics']['bbTouch']=='UPPER'
+      and _m['metrics']['candleAna']>50 and _m['metrics']['retracePct']>0
+      and _m['metrics']['consec']==1, str(_m['metrics']))
+def _mkser2():
+    ser=_mkser()
+    ser[58]=[58*300000, 99.0, 99.2, 97.0, 97.4, 10.0]         # bar closed: close dekat low
+    return ser
+_m2=ds.build_payload_v7('X',_mkser2(),'LONG','A','fade','RANGE',0.0,{'15m':{},'1h':{}})
+check('v12.0 perilaku kurir: LONG closePos 18.2 + bbTouch LOWER + candleAna negatif',
+      abs(_m2['metrics']['closePos']-18.2)<0.5 and _m2['metrics']['bbTouch']=='LOWER'
+      and _m2['metrics']['candleAna']<-50, str(_m2['metrics']))
 
 # ---------- 6. PAYLOAD KONTRAK v7 ----------
 ds.btc_bias=lambda: {'bias':'UP','b5':'UP','b1':'UP'}

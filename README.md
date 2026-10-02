@@ -13,6 +13,19 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 ---
 
 
+## CHANGELOG v12.0 (2 Okt) - TRUE SCALPER GOD (ACC user: rombak kurir+bos)
+- Diagnosis 24 jam: WR 57% tapi netto -1.19 (SL rata -0.21 vs WIN-LOCK +0.06); DOGE LONG conf 94
+  REJECT = CRITERIA bermasalah, bukan sekadar LLM pelit.
+- BOS v12.0 "THE TRUE SCALPER GOD": persona baru (baca lembah/pucuk RSI6 + lensa anti-fakeout);
+  CRITERIA diganti total - angka fiksi (SL 0.6/0.8/1.2%) & "P8 internal" MUSNAH (angka = milik
+  eksekutor); instruksi analisis baru; token kanonik WAIT_FOR_RETRACE_TO_FVG &
+  MISSING_STRUCTURE_CONFIRMATION dipertahankan (kontrak enforcer/log).
+- KURIR v12.0 (dewa_skill): ANTI-FAKEOUT LENS di payload - candleAna, closePos, consec,
+  retracePct, bbTouch (BB20 2-sd) = matematika host, bukan opini LLM.
+- EKSEKUTOR: TP BAND kontrak user 0.6-1.5% (clamp TP saja; SL tetap ATR murni v10.0 tanpa
+  clamp - kontrak "tanpa pembatasan" dipertahankan); log atr_sl mult TIGHT 0.50 diperbaiki (stale 0.75).
+- Panel: v12.0 TRUE SCALPER; TP/SL line -> TP BAND 0.6-1.5%. test_v7 97/97.
+
 ## CHANGELOG v11.0 (1 Okt) - PRE-EMPTIVE PREDATOR ENGINE
 - PRE-EMPTIVE PEAK DETECTOR (hybrid_rules.gen_hybrid): fade murni SHORT RSI6>=88 / LONG RSI6<=12
   + volx>=1.5 + ekor lawan>=35% => BYPASS data-check HTF & veto 1h + grade 'A+' (entri sebelum

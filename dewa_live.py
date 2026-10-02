@@ -535,7 +535,7 @@ def _iterate_inner(once=False):
             tp_rr = 2.5             # Konsisten dengan target Scalp-Lock v7.3
         try:
             if _ss.get('sl_pct_suggest'):
-                _mult={'TIGHT':0.75,'WIDE':1.30}.get(variant,1.0)
+                _mult={'TIGHT':0.50,'WIDE':1.30}.get(variant,1.0)
                 log({'event':'atr_sl','symbol':cd['sym'],'atr_suggest':float(_ss.get('sl_pct_suggest')),
                      'msg':f'SL = ATR14x1.5 x{_mult} (v8.0 PURE ATR)'})
         except Exception: pass
@@ -545,6 +545,12 @@ def _iterate_inner(once=False):
         # v9.0: P36 clamp statis DIHAPUS per directive — sl_pct murni 100% mengikuti
         # kalkulasi Pure ATR (slSuggest) secara linear tanpa pembatas atas/bawah.
         sl_d=entry*sl_pct; tp_d=sl_d*tp_rr  # SL % dari harga (proporsional semua coin)
+        # v12.0 TP BAND SCALPER (directive user verbatim): TP dipaksa masuk band 0.6–1.5%
+        # — kontrak harga CASH scalper, diterapkan SETELAH TP dihitung ATR (SL gak disentuh,
+        # tetap ATR murni per kontrak "tanpa pembatasan" v10.0). Terdekat yang dulu kena = target.
+        tp_pct=tp_d/entry if entry else 0.0
+        if tp_pct<0.006: tp_d=entry*0.006
+        elif tp_pct>0.015: tp_d=entry*0.015
         sl=entry-sl_d if side=='LONG' else entry+sl_d
         tp=entry+tp_d if side=='LONG' else entry-tp_d
         if LIVE:
