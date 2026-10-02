@@ -272,6 +272,23 @@ _m2=ds.build_payload_v7('X',_mkser2(),'LONG','A','fade','RANGE',0.0,{'15m':{},'1
 check('v12.0 perilaku kurir: LONG closePos 18.2 + bbTouch LOWER + candleAna negatif',
       abs(_m2['metrics']['closePos']-18.2)<0.5 and _m2['metrics']['bbTouch']=='LOWER'
       and _m2['metrics']['candleAna']<-50, str(_m2['metrics']))
+# ---------- 5i. v12.2 GODMODE SENSOR (port v15-pro-genius/godmode_v2_engine) ----------
+import importlib.util as _iu
+_gspec=_iu.spec_from_file_location('gmv2',os.path.join(os.path.dirname(os.path.abspath(__file__)),'gmv2.py'))
+_gm=_iu.module_from_spec(_gspec); _gspec.loader.exec_module(_gm)
+check('v12.2 gmv2: bobot & tier verbatim GMV2 asli', _gm.FEATURE_WEIGHTS=={"trend":25,"momentum":20,"mtf_alignment":15,"liquidity":15,"volume":10,"volatility":10,"session":5}
+      and _gm.TIER_THRESHOLDS=={"sniper":90,"execute":75,"watch":71,"reject":0})
+check('v12.2 gmv2: 2 set bobot TREND vs MEAN_REVERSION verbatim', _gm.MEAN_REVERSION_WEIGHTS=={"trend":5,"momentum":30,"mtf_alignment":5,"liquidity":30,"volume":10,"volatility":10,"session":10})
+_fgm=_gm.compute_features(_mkser(),None)
+check('v12.2 gmv2: fitur lengkap 7 grup', _fgm is not None and all(k in _fgm for k in ('trend_score','rsi5','stoch_k','mtf_alignment_score','near_support','near_resistance','atr_pct','volume_ratio','session_score')))
+_sgm,_tgm,_bdm=_gm.score(_fgm,'LONG')
+check('v12.2 gmv2: skor 0-100 + tier valid + breakdown 7 dimensi', 0<=_sgm<=100 and _tgm in ('SNIPER','EXECUTE','WATCH','REJECT') and len([k for k in _bdm if k!='setup_type'])==7)
+_gbf=_gm.best_for([[k*300000,100,100.1,99.9,100+(0.05 if k%2 else -0.02),10.0] for k in range(60)],None)
+check('v12.2 gmv2: best_for balikkin arah+skor', _gbf is not None and _gbf['best'] in ('LONG','SHORT','NEUTRAL') and 0<=_gbf['score']<=100)
+check('v12.2 wiring: kurir evaluate + brief.godmode + notif GODMODE + bos kompas',
+      'gmv2.evaluate(kk[:i+1]' in _t and "brief['godmode']" in _t and "'godmode':_br.get('godmode')" in _t
+      and 'GODMODE:' in _tg and 'Payload.godmode = sensor' in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'jev_bridge.py')).read())
+check('v12.2 kurir: closes 15m di-stash build_htf_maps (tanpa fetch ekstra)', "maps['c15']" in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'hybrid_rules.py')).read())
 
 # ---------- 6. PAYLOAD KONTRAK v7 ----------
 ds.btc_bias=lambda: {'bias':'UP','b5':'UP','b1':'UP'}

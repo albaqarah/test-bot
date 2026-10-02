@@ -66,13 +66,15 @@ def _context(brief):
     src=str(brief.get('source',''))
     side=str(brief.get('side',''))
     sym=str(brief.get('symbol',''))
-    return f"Sinyal kurir: {sym} {side} (engine={src}). Payload JSON lengkap ada di state."
+    gm=brief.get('godmode') or {}
+    gml=f" GODMODE: {gm.get('line')}" if gm.get('line') else ""
+    return f"Sinyal kurir: {sym} {side} (engine={src}).{gml} Payload JSON lengkap ada di state."
 
 def build_questions(brief):
     """v10.1: SATU pertanyaan choice — bos analisis internal (PURE ATR + SuperFlow + MSS/FVG) lalu pilih."""
     q={"decision":{"type":"choice",
         "instructions":SYSTEM_IMMUNITY+"\n\n"+PERSONA_V7+"\n\nKONTEKS:\n"+_context(brief)+
-            "\n\nAnalisis internal payload JSON sebagai scalper TRUE 5-menit: baca lembah/pucuk via RSI6 realtime + lensa anti-fakeout (closePos, retracePct, bbTouch, consec, candleAna), cek regime & BTC bias sebagai kekuatan gerak, identifikasi fakeout sebelum menembak. Pilih opsi terakurat untuk TP 0.6-1.5% ke depan.",
+            "\n\nAnalisis internal payload JSON sebagai scalper TRUE 5-menit: baca lembah/pucuk via RSI6 realtime + lensa anti-fakeout (closePos, retracePct, bbTouch, consec, candleAna), cek regime & BTC bias sebagai kekuatan gerak, identifikasi fakeout sebelum menembak. Payload.godmode = sensor kuantitatif GODMODE V2 dari Kurir: score 0-100 utk arah sinyal dgn tier SNIPER (>=90) / EXECUTE (>=75) / WATCH (>=71) / REJECT (<71) dan setup_type (TREND_CONTINUATION / MEAN_REVERSION) - pakai sebagai KOMPAS kuantitatif: SNIPER/EXECUTE = konfirmasi kuat utk menembak; WATCH/REJECT = hanya tembak kalau RSI6 & lensa anti-fakeout tetap kuat; jika godmode bertentangan keras dgn RSI6 realtime, jelaskan konfliknya di alasan sebelum memilih. Pilih opsi terakurat untuk TP 0.6-1.5% ke depan.",
         "criteria":CRITERIA}}
     return q
 

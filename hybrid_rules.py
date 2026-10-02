@@ -39,6 +39,7 @@ def build_htf_maps(sym, k5_len):
             e20, e50 = ema_series(c, 20), ema_series(c, 50)
             if tf == '15m':
                 maps[tf] = {int(x[0]): (e20[j], e50[j]) for j, x in enumerate(kh)}
+                maps['c15'] = [float(x[4]) for x in kh]  # v12.2: closes 15m utk sensor GMV2 (tanpa fetch ekstra)
             else:
                 v = [float(x[5]) for x in kh]
                 out = {}

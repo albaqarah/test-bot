@@ -228,6 +228,7 @@ def fmt_open(e):
         + NL + _bos_line().replace('🤖 ','🤖 ')
         + NL + f"🧠  <i>{e.get('reason','')}</i>"
         + mom + loc38 + smc
+        + (NL + f"🎮 GODMODE: {e['godmode'].get('line')}" if (e.get('godmode') or {}).get('line') else "")
         + NL + DIV
         + NL + f"🎟️ Slot {e.get('n_open','?')}/5 · {_equity(e.get('saldo',0)).replace('💰 Ekuitas   ','💰 Ekuitas ')}"
         + NL + f"📊 Hari ini {r['w']}W/{r['l']}L · WR {_wr(r):.1f}% · Net {r['net']:+.2f}"

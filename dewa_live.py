@@ -29,6 +29,7 @@ _load_env()
 spec=importlib.util.spec_from_file_location('vg',os.path.join(os.path.dirname(os.path.abspath(__file__)),'v15_grade.py'))
 vg=importlib.util.module_from_spec(spec); spec.loader.exec_module(vg)
 import reversion_bot as rb
+import gmv2  # v12.2 GODMODE sensor (port v15-pro-genius, stdlib)
 import dewa_skill as ds  # v7.0: build_payload_v7 (kontrak JSON bos) + btc_bias (macro)
 import order_guard as og
 import tg_notify as tg
@@ -422,6 +423,19 @@ def _iterate_inner(once=False):
                             brief['metrics']['atrDistance']=_el.get('swing_dist_atr')
                             brief['metrics']['swingAgeBars']=_el.get('swing_age_bars')
                     except Exception: pass
+                    # ===== v12.2 GODMODE SENSOR (port v15-pro-genius/godmode_v2_engine, stdlib) =====
+                    # FeatureEngine + GodModeScorer: skor kuantitatif 0-100 utk ARAH SINYAL
+                    # (trend/momentum/mtf/liquidity/volume/volatility/session + tier SNIPER/EXECUTE/
+                    # WATCH/REJECT). Bot TETAP bosnya jev — GM cuma kompas tambahan di payload.godmode.
+                    try:
+                        _gmr=gmv2.evaluate(kk[:i+1], maps.get('c15'), 'LONG' if side=='L' else 'SHORT', rs[:i+1])
+                        if _gmr:
+                            brief['godmode']={'score':_gmr['score'],'tier':_gmr['tier'],
+                                'setup':_gmr['setup'],'breakdown':_gmr['breakdown'],'line':_gmr['line']}
+                            log({'event':'gm_score','symbol':sym,'side':side,
+                                 'score':_gmr['score'],'tier':_gmr['tier'],'setup':_gmr['setup']})
+                    except Exception as _gme:
+                        log({'event':'gm_err','symbol':sym,'msg':str(_gme)[:80]})
                     # P14 TRADFI GATE: blok entry 3 jam sebelum break/close (anti volume kopong)
                     if sym in tfs.TRADFI:
                         _eb,_ff,_why=tfs.tradfi_window()
@@ -600,6 +614,7 @@ def _iterate_inner(once=False):
                              'fvg':_br.get('fvgStatus'),
                              'regime':regime,'rsi6':_br.get('metrics',{}).get('rsi6Realtime'),
                              'entryLoc':_br.get('entryLoc'),
+                             'godmode':_br.get('godmode'),
                              'n_open':len(st['open']),'saldo':st.get('saldo',0)}))
         # save PER EVENT: kalau proses kena kill saat LLM error bertubi, keputusan gak ilang & gak diulang
         save_state(st)

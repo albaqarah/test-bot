@@ -13,6 +13,20 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 ---
 
 
+## CHANGELOG v12.2 (2 Okt) - GODMODE SENSOR (ACC user: bedah engine GMV2 v15-pro-genius & terapkan)
+- Sumber: github.com/albaqarah/v15-pro-genius godmode_v2_engine.py (FeatureEngine 7 fitur +
+  GodModeScorer 2 set bobot + tier). Port stdlib murni -> gmv2.py (numpy/pandas gak ada di runtime;
+  logika bobot/tier/matematika arah verbatim).
+- Deviasi terdokumentasi: RSI(5) GMV2 -> RSI(6) SMA-rolling (mandat RSI6 user; Wilder rsi6 tetap
+  takak di pipeline sinyal); RSI 15m pakai closes 15m stash build_htf_maps (maps['c15'], tanpa
+  fetch ekstra); struktur swing fractal 2/2 verbatim.
+- KURIR: tiap kandidat di-sensor gmv2.evaluate(kk[:i+1], c15, arah_sinyal, rsi6) -> brief.godmode
+  {score, tier, setup, breakdown, line} + log gm_score.
+- BOS: godmode sbg KOMPAS kuantitatif di instruksi (SNIPER>=90/EXECUTE>=75/WATCH>=71/REJECT) +
+  konteks line; keputusan tetap milik jev (GMV2 bukan pengganti bos).
+- Panel entry: baris "GODMODE: GM..". test_v7 104/104 (termasuk verifikasi bobot/tier verbatim).
+- PELAJARAN smoke: evaluate WAJIB bar closed (kk[:i+1]) - bar live bikin StochK 0/vol 0.12.
+
 ## CHANGELOG v12.0 (2 Okt) - TRUE SCALPER GOD (ACC user: rombak kurir+bos)
 - Diagnosis 24 jam: WR 57% tapi netto -1.19 (SL rata -0.21 vs WIN-LOCK +0.06); DOGE LONG conf 94
   REJECT = CRITERIA bermasalah, bukan sekadar LLM pelit.
