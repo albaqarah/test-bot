@@ -567,17 +567,16 @@ def _iterate_inner(once=False):
         else:  # NORMAL atau Kosong
             sl_pct = _atr_f         # Ikut 100% volatilitas riil ATR koin bersangkutan (PAS DAN ADIL)
             tp_rr = 2.5             # Konsisten dengan target Scalp-Lock v7.3
-        # v12.3 FIX FLOOR: floor teknis 0.25% ditagih SETELAH ×mult — dulu floor market_snapshot
-        # (suggest naik ke 0.25) masih dikali 0.50 TIGHT => SL efektif 0.125% (audit 2 Okt:
-        # TRX 0.125% / BNB 0.105% / BCH 0.18% mati oleh wick receh; BNB MAE cuma 0.11%).
-        # Berlaku semua varian; WIDE tetap boleh > 0.25% (max()).
-        sl_pct = max(sl_pct, 0.0025)
+        # v12.3.1 FIX FLOOR (directive user 2 Okt): floor SL dinaikkan ke 0.7% — "LONGGARIN
+        # SL MINIM KE 0.7%". Dulu 0.25% (dan sebelum fix v12.3 bocor jadi 0.125% via ×0.50
+        # TIGHT). Tetap ditagih SETELAH ×mult; WIDE tetap boleh > floor (max()).
+        sl_pct = max(sl_pct, 0.007)
         try:
             if _ss.get('sl_pct_suggest'):
                 _mult={'TIGHT':0.50,'WIDE':1.30}.get(variant,1.0)
                 log({'event':'atr_sl','symbol':cd['sym'],'atr_suggest':float(_ss.get('sl_pct_suggest')),
                      'mult':_mult,'final_sl_pct':round(sl_pct*100,4),
-                     'msg':f'SL = ATR14x1.5 x{_mult} (v8.0 PURE ATR) · v12.3 floor 0.25% post-mult'})
+                     'msg':f'SL = ATR14x1.5 x{_mult} (v8.0 PURE ATR) · v12.3.1 floor 0.7% post-mult'})
         except Exception: pass
         # (P32 ATR-SL lama DIGABUNG ke blok v8.0 di atas — ATR kini basis utama SL,
         # bukan widening-only; blok _sug_f>sl_pct DIHAPUS per directive v8.0.)

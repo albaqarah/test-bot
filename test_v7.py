@@ -205,7 +205,7 @@ check('v9.0 Super Money Flow: helper + wiring ke gen_hybrid', 'def smc_btc_volum
 _exp=os.path.join(os.path.dirname(os.path.abspath(__file__)),'.env.example')
 if not os.path.exists(_exp): _exp=os.path.join(os.path.dirname(os.path.abspath(__file__)),'test-bot','.env.example')
 _ex=open(_exp).read()
-check('v9.0 TRAIL_ACT 0.004 / TRAIL_DIST 0.002 (.env.example)', 'TRAIL_ACT=0.004' in _ex and 'TRAIL_DIST=0.002' in _ex)
+check('v12.3.1 TRAIL_ACT 0.007 / TRAIL_DIST 0.002 (.env.example)', 'TRAIL_ACT=0.007' in _ex and 'TRAIL_DIST=0.002' in _ex)
 # ---------- 5d. v10.0 PURE UNCLAMPED ATR (kurir bebas clamp) ----------
 _ms=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'market_snapshot.py')).read()
 check('v10.0 kurir: clamp 0.8-2.4% MUSNAH (sl_pct = 1.5xATR murni)', 'max(0.8,min(2.4' not in _ms and "sl_pct=1.5*m['atr_pct']" in _ms)
@@ -400,7 +400,7 @@ _r6=rb.rsi6([float(x[4]) for x in _kk]+[101.0])[-1]
 check('v12.3 lens math: rsi6(closes + float tick) jalan', _r6 is not None and 0<=_r6<=100, str(_r6))
 # (f) wiring & floor via source-check (bukan import ulang dewa_live)
 _src=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'dewa_live.py')).read()
-check('v12.3 SL floor ditagih POST-mult (max 0.25%)', 'sl_pct = max(sl_pct, 0.0025)' in _src, '')
+check('v12.3.1 SL floor 0.7% ditagih POST-mult', 'sl_pct = max(sl_pct, 0.007)' in _src, '')
 check('v12.3 silent-kill lens MUSNAH (tanpa list nyempul di CALL)', '+[[0,0,0,0,_px,0]])' not in _src and '+[_px])' in _src, '')
 check('v12.3 wiring fresh_recheck sebelum llm_call', 0<_src.find('hr.fresh_recheck(cd')<_src.find('d=llm_call('), '')
 check('v12.3 log audit: final_sl_pct + rsi_now di decision', "'final_sl_pct'" in _src and "'rsi_now':_rc.get('rsi_now')" in _src, '')
