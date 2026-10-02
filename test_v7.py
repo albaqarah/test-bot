@@ -217,7 +217,7 @@ check('v12.0 instruksi bos = lensa anti-fakeout + lembah/pucuk (instruksi v10.1 
 check('v10.1 docstring stale pipeline_log musnah (jev_bridge)', 'pipeline_log' not in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'jev_bridge.py')).read())
 # ---------- 5f. v10.1.1 FINAL POLISH (branding) ----------
 _tg=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'tg_notify.py')).read()
-check('v12.0 panel BOT START = TYPESAFE SNIPER v12.0 TRUE SCALPER', 'TYPESAFE SNIPER v12.0 TRUE SCALPER' in _tg and 'PRE-EMPTIVE' not in _tg.split('TYPESAFE SNIPER')[1][:60])
+check('v12.3 panel BOT START = TYPESAFE SNIPER v12.3 TRUE SCALPER', 'TYPESAFE SNIPER v12.3 TRUE SCALPER' in _tg and 'PRE-EMPTIVE' not in _tg.split('TYPESAFE SNIPER')[1][:60])
 check('v10.1.1 label P1→P8 musnah, ganti ANALISA v10.1', 'P1→P8' not in _tg and 'ANALISA · PURE ATR' in _tg and 'SUPER MONEY FLOW' in _tg)
 # ---------- 5g. v11.0 PRE-EMPTIVE PREDATOR ----------
 check('v11.0 kurir: PRE-EMPTIVE PEAK DETECTOR di gen_hybrid', '_preemptive' in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'hybrid_rules.py')).read()
@@ -370,6 +370,40 @@ check('v7.2.1 ATR barrier: pen secuil = NONE (MSS palsu dibuang)', _r['mss']=='N
 _short=_base[:8]+[[99.9,101.5,99.8,101.3,50.0]]           # 9 bar -> ATR tak cukup
 _r=smc.detect_mss(_short)
 check('v7.2.1 ATR barrier: data <15 bar = fail-closed NONE', _r['mss']=='NONE', str(_r))
+
+# ---------- 10. v12.3 FRESH RE-CHECK + SL FLOOR POST-MULT ----------
+# (a) P12-LIVE: LONG dilarang saat RSI6 live > 85 (pucuk tersembunyi setelah bar sinyal)
+_kk=[[0,100+i*0.1,100.1+i*0.1,99.9+i*0.1,100.0+i*0.1,10.0] for i in range(59)]
+cd={'sym':'TESTUSDT','side':'L','grade':'A','src':'trend'}
+_r=hr.fresh_recheck(cd, {'TESTUSDT':_kk}, rb, px=105.9)
+check('v12.3 P12-LIVE: LONG dgn RSI6 live >85 = block', _r['ok'] is False and 'P12-LIVE' in _r['why'], str(_r))
+# (b) A+ STALENESS: SHORT pre-emptive pas pucuknya udah basi (RSI live turun ke 15-80) = block
+_kd=[[0,110-i*0.05,110.05-i*0.05,109.95-i*0.05,110.0-i*0.05,10.0] for i in range(57)]
+_kd=_kd+[[0,109.5,109.55,108.95,109.0,10.0],[0,109.0,109.05,108.45,108.5,10.0]]
+cd={'sym':'TESTUSDT','side':'S','grade':'A+','src':'fade'}
+_r=hr.fresh_recheck(cd, {'TESTUSDT':_kd}, rb, px=108.4)
+check('v12.3 A+ staleness: SHORT A+ pas pucuk basi (RSI live <80) = block', _r['ok'] is False and 'BASI' in _r['why'], str(_r))
+# (c) fade sehat: ekor jenuh >= 25% = lolos tanpa demote (kasus LTC/SUI fade valid)
+_kb=[[0,100.0,100.02,99.98,100.0,10.0] if i%2==0 else [0,100.01,100.03,99.99,100.01,10.0] for i in range(58)]
+_kb=_kb+[[0,100.0,100.05,98.0,99.9,10.0]]
+cd={'sym':'TESTUSDT','side':'L','grade':'A','src':'fade'}
+_r=hr.fresh_recheck(cd, {'TESTUSDT':_kb}, rb, px=None)
+check('v12.3 fade sehat: ekor jenuh >=25% = lolos (bos tetap ditanya)', _r['ok'] is True and _r['demote'] is False, str(_r))
+# (d) FADE-DEMOTE: climax hilang (bar live marubozu tanpa ekor) = demote B, bukan REJECT paksa
+_km=[[0,100.0,100.02,99.98,100.0,10.0] if i%2==0 else [0,100.01,100.03,99.99,100.01,10.0] for i in range(58)]
+_km=_km+[[0,100.0,100.95,99.95,100.9,10.0]]
+cd={'sym':'TESTUSDT','side':'L','grade':'A','src':'fade'}
+_r=hr.fresh_recheck(cd, {'TESTUSDT':_km}, rb, px=None)
+check('v12.3 fade-demote: climax hilang = demote B dgn alasan ekor <25%', _r['ok'] is True and _r['demote'] is True and '25%' in _r['demote_why'], str(_r))
+# (e) regression lens: rb.rsi6 menerima closes+float live (silent-kill [[...]] MUSNAH)
+_r6=rb.rsi6([float(x[4]) for x in _kk]+[101.0])[-1]
+check('v12.3 lens math: rsi6(closes + float tick) jalan', _r6 is not None and 0<=_r6<=100, str(_r6))
+# (f) wiring & floor via source-check (bukan import ulang dewa_live)
+_src=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'dewa_live.py')).read()
+check('v12.3 SL floor ditagih POST-mult (max 0.25%)', 'sl_pct = max(sl_pct, 0.0025)' in _src, '')
+check('v12.3 silent-kill lens MUSNAH (tanpa list nyempul di CALL)', '+[[0,0,0,0,_px,0]])' not in _src and '+[_px])' in _src, '')
+check('v12.3 wiring fresh_recheck sebelum llm_call', 0<_src.find('hr.fresh_recheck(cd')<_src.find('d=llm_call('), '')
+check('v12.3 log audit: final_sl_pct + rsi_now di decision', "'final_sl_pct'" in _src and "'rsi_now':_rc.get('rsi_now')" in _src, '')
 
 print(f"\n===== test_v7: {PASS} pass / {FAIL} fail =====")
 sys.exit(1 if FAIL else 0)

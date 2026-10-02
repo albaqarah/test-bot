@@ -165,13 +165,13 @@ def _regime_line():
 # ---------- START / STOP / RESTART ----------
 def fmt_start(saldo, n_open=0, maxpos=5, n_pair=41):
     r=_resume24()
-    return (f"🟢 <b>BOT START · TYPESAFE SNIPER v12.0 TRUE SCALPER</b>" + NL + DIV
+    return (f"🟢 <b>BOT START · TYPESAFE SNIPER v12.3 TRUE SCALPER</b>" + NL + DIV
         + NL + f"🧾 Mode      {_mode_line()}"
         + NL + _equity(saldo)
         + NL + "💵 Margin    $2.00/trade · notional $20.00"
         + NL + f"🎟️ Slot      {maxpos} · 1 posisi/pair · cd 30m"
         + NL + "🪙 Pair      41 (38 crypto + 3 logam + PAXG)"
-        + NL + "🎯 TP/SL     SL = ATR14x1.5 murni (×0.50/1.0/1.3 bos) · TP BAND 0.6–1.5% · floor teknis 0.25%"
+        + NL + "🎯 TP/SL     SL = ATR14x1.5 murni (×0.50/1.0/1.3 bos) · TP BAND 0.6–1.5% · floor 0.25% post-mult"
         + NL + "🛡️ BE        TRAIL aktif: kunci +0.4% → puncak −0.2%"
         + NL + _tradfi_line()
         + NL + _bos_line()
@@ -228,7 +228,8 @@ def fmt_open(e):
         + NL + _bos_line().replace('🤖 ','🤖 ')
         + NL + f"🧠  <i>{e.get('reason','')}</i>"
         + mom + loc38 + smc
-        + (NL + f"🎮 GODMODE: {e['godmode'].get('line')}" if (e.get('godmode') or {}).get('line') else "")
+        + (NL + f"🎮 GODMODE: {e['godmode'].get('line')}"
+            + (f" · RSI6live {e.get('rsi6')}" if e.get('rsi6') is not None else "") if (e.get('godmode') or {}).get('line') else "")
         + NL + DIV
         + NL + f"🎟️ Slot {e.get('n_open','?')}/5 · {_equity(e.get('saldo',0)).replace('💰 Ekuitas   ','💰 Ekuitas ')}"
         + NL + f"📊 Hari ini {r['w']}W/{r['l']}L · WR {_wr(r):.1f}% · Net {r['net']:+.2f}"

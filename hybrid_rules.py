@@ -240,3 +240,61 @@ def gen_hybrid(kk, rs, zz, vsma, htf15, htf1h_struct, cek_1h=True, btcv=None):
             grade = 'A' if (len(ss) > 1 or any(s[1] == 'A' for s in ss)) else 'B'
         out.append((i, ss[0][0], grade, ss[0][2]))
     return out
+
+
+def fresh_recheck(cd, k_cache, rb, px=None):
+    """v12.3 FRESH RE-CHECK — evaluasi ulang sinyal di DATA LIVE sebelum nanya bos.
+    Latar: audit 2 Okt — bar sinyal bisa basi hingga 6 menit saat keputusan diambil
+    (kasus 11:26 WIB: RSI6 bar sinyal 58.8, bar closed berikutnya 82.0 = pucuk
+    tersembunyi; BCH A+ nembak pas RSI live udah 61 setelah pucuk 93).
+    Input: cd kandidat (side masih 'L'/'S' — normalisasi ke LONG/SHORT terjadi belakangan),
+    k_cache[sym] = klines 5m mentah 600 bar (bar terakhir = filler live), rb = reversion_bot
+    (rsi6 Wilder), px = harga live ticker (boleh None).
+    Return {'ok','why','rsi_now','k_now','demote','demote_why'}.
+    - P12-LIVE (reinforcement rule lama, bukan gate baru): LONG dilarang RSI6 live > 85,
+      SHORT dilarang RSI6 live < 15 — diukur ulang di tick live, bukan bar sinyal.
+    - A+ STALENESS: jalur pre-emptive v11.0 dicabut kalau pucuk/lembah absolutnya udah
+      basi di tick live (SHORT: RSI6 live < 80; LONG: RSI6 live > 20).
+    - FADE-DEMOTE (kualifikasi fade No.4, bukan gate): sinyal fade (bukan pre-emptive)
+      dgn climax-nya ilang di bar live — ekor searah sinyal < 25% (harga masih nge-push
+      tanpa sumbu jenuh) — demote ke B, bos tetap ditanya (bukan REJECT paksa)."""
+    out = {'ok': True, 'why': '', 'rsi_now': None, 'k_now': None, 'demote': False, 'demote_why': ''}
+    try:
+        sym = cd.get('sym'); s = cd.get('side')
+        is_long = s in ('L', 'LONG')
+        k5 = k_cache.get(sym) or []
+        if len(k5) < 30:
+            out['why'] = 'data kurang, fail-open'
+            return out
+        c = [float(x[4]) for x in k5[:-1]]          # bar closed (buang filler)
+        if px is not None:
+            try: c = c + [float(px)]                 # tick live
+            except Exception: pass
+        r6 = rb.rsi6(c)[-1]
+        out['rsi_now'] = round(r6, 1) if r6 is not None else None
+        lk = k5[-1]                                  # bar live: ekor searah sinyal sekarang
+        _o, _h, _l, _c2 = float(lk[1]), float(lk[2]), float(lk[3]), float(lk[4])
+        _rng = _h - _l
+        _wt = (_h - max(_o, _c2)) / _rng * 100 if _rng > 0 else 0.0
+        _wb = (min(_o, _c2) - _l) / _rng * 100 if _rng > 0 else 0.0
+        out['k_now'] = round(_wb if is_long else _wt, 1)
+        # 1) P12-LIVE
+        if is_long and r6 is not None and r6 > 85:
+            out['ok'] = False; out['why'] = f'P12-LIVE: RSI6 live {r6:.1f} > 85 — LONG dilarang (pucuk tersembunyi setelah bar sinyal)'
+        elif (not is_long) and r6 is not None and r6 < 15:
+            out['ok'] = False; out['why'] = f'P12-LIVE: RSI6 live {r6:.1f} < 15 — SHORT dilarang (lembah tersembunyi setelah bar sinyal)'
+        # 2) A+ STALENESS (pucuk/lembah absolut udah basi)
+        elif cd.get('grade') == 'A+' and r6 is not None:
+            if is_long and r6 > 20:
+                out['ok'] = False; out['why'] = f'A+ BASI: lembah absolut udah hilang (RSI6 live {r6:.1f} > 20, trigger bar sinyal <= 12)'
+            elif (not is_long) and r6 < 80:
+                out['ok'] = False; out['why'] = f'A+ BASI: pucuk absolut udah hilang (RSI6 live {r6:.1f} < 80, trigger bar sinyal >= 88)'
+        # 3) FADE-DEMOTE: climax hilang di bar live (ekor searah sinyal < 25%)
+        elif cd.get('src') == 'fade' and cd.get('grade') != 'A+':
+            _tail = _wb if is_long else _wt
+            if _tail < 25.0:
+                out['demote'] = True
+                out['demote_why'] = f'climax hilang: ekor {"bawah" if is_long else "atas"} bar live {(_tail):.0f}% < 25% (harga masih nge-push tanpa sumbu jenuh)'
+    except Exception:
+        out = {'ok': True, 'why': 'recheck err fail-open', 'rsi_now': None, 'k_now': None, 'demote': False, 'demote_why': ''}
+    return out

@@ -13,6 +13,22 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 ---
 
 
+## CHANGELOG
+
+## v12.3 (2 Okt) — FRESH RE-CHECK (audit forensik 2 Okt, 35 trade)
+- FIX silent-kill #2: `rsi6Realtime` MATI TOTAL di produksi (list nyempul di argumen
+  rb.rsi6 → TypeError → except:pass) → bos jev & notif tanpa RSI6 live; FINAL-SEAL
+  fade-exception ikut mati. Fix: float tick + window 60-bar.
+- FRESH RE-CHECK (`hybrid_rules.fresh_recheck`, dipanggil sebelum llm_call):
+  P12-LIVE (LONG dilarang RSI6 live >85 / SHORT <15 di tick live),
+  A+ STALENESS (pre-emptive dicabut kalau pucuk/lembah absolut udah basi di tick),
+  FADE-DEMOTE (fade kontra-momentum dgn climax hilang → grade B, bos tetap ditanya).
+- FIX SL FLOOR: floor 0.25% ditagih SETELAH ×mult (dulu 0.25×0.50=0.125% — TRX/BNB/BCH).
+  Log `atr_sl` + `final_sl_pct` utk audit.
+- Notif: GODMODE line + `RSI6live`; log decision bawa `rsi6rt`/`rsi_now`/`k_now`.
+- Motif: kasus 11:26 WIB (FIL/INJ/TRX nembak LONG di pucuk tersembunyi 82-89 — data
+  basi bar sinyal) & BCH conf 97 dgn RSI live 61. Test 113/113.
+
 ## CHANGELOG v12.2 (2 Okt) - GODMODE SENSOR (ACC user: bedah engine GMV2 v15-pro-genius & terapkan)
 - Sumber: github.com/albaqarah/v15-pro-genius godmode_v2_engine.py (FeatureEngine 7 fitur +
   GodModeScorer 2 set bobot + tier). Port stdlib murni -> gmv2.py (numpy/pandas gak ada di runtime;

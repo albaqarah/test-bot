@@ -410,8 +410,11 @@ def _iterate_inner(once=False):
                     try:
                         _px=live_px(sym)
                         if _px:
+                            # v12.3 FIX SILENT-KILL: elemen terakhir WAJIB float (_px), dulu [[0,0,0,0,_px,0]]
+                            # (list nyempul) -> TypeError -> except:pass -> lensa RSI6 live MATI TOTAL di produksi.
+                            # 60-bar (bukan 19) + tick live = selaras dgn seri rules (rs dari 600 bar).
                             brief.setdefault('metrics',{})['rsi6Realtime']=round(
-                                rb.rsi6([float(r[4]) for r in kk[-19:]]+[[0,0,0,0,_px,0]])[-1],1)
+                                rb.rsi6([float(r[4]) for r in kk[-60:]]+[_px])[-1],1)
                     except Exception: pass
                     # v7.1 ANTI-CHASE DATA PLUMBING: entryLoc (host, gratis) -> metrics kontrak bos.
                     # Bos P5 (ANTI-CHASE COMPILER GUARD) WAJIB REJECT + WAIT_FOR_RETRACE_TO_FVG
@@ -466,6 +469,21 @@ def _iterate_inner(once=False):
                  'n_open':n_open,'candidates':len(candidates)})   # user: cukup di logs, jangan spam TG
             st['full_warned']=True
     for cd in candidates:
+        # ===== v12.3 FRESH RE-CHECK: sinyal dievaluasi ulang di DATA LIVE sebelum nanya bos =====
+        # Audit 2 Okt: bar sinyal bisa basi saat eksekusi (trio 11:26 WIB nembak LONG di
+        # pucuk tersembunyi 82-89; BCH A+ tembak pas RSI live 61). P12-LIVE + A+ staleness
+        # = reinforcement rule lama di tick live; fade lemah = demote B (bos tetap ditanya).
+        _rc=hr.fresh_recheck(cd, k_cache, rb, px=live_px(cd['sym']))
+        if not _rc['ok']:
+            done.discard(cd['key'])  # gak dikunci — kondisi live bisa berubah, sinyal boleh dinilai ulang
+            st.setdefault('reject_cd',{})[cd['sym']+':'+cd['side']]=time.time()*1000+15*60*1000
+            log({'event':'recheck_block','symbol':cd['sym'],'side':cd['side'],'grade':cd['grade'],
+                 'rsi_now':_rc['rsi_now'],'k_now':_rc['k_now'],'why':_rc['why']})
+            continue
+        if _rc['demote']:
+            cd['grade']='B'
+            log({'event':'recheck_demote','symbol':cd['sym'],'side':cd['side'],
+                 'rsi_now':_rc['rsi_now'],'k_now':_rc['k_now'],'why':_rc['demote_why']})
         if n_open>=og.MAX_GLOBAL_POSITIONS:
             log({'event':'skip_full_position','symbol':cd['sym'],'side':cd['side'],'grade':cd['grade']})
             done.discard(cd['key'])  # jangan dikunci done — kalau slot buka lagi, sinyal bisa dinilai ulang
@@ -477,8 +495,10 @@ def _iterate_inner(once=False):
         # 'L' != 'LONG' bikin SL/TP kebalik (bug BCH 21:51 WIB: LONG kena SL palsu di profit)
         _side=cd['side']
         cd['side']={'L':'LONG','S':'SHORT'}.get(_side,_side)
+        _mtc=(cd.get('brief') or {}).get('metrics') or {}
         log({'event':'decision','symbol':cd['sym'],'side':cd['side'],'grade':cd['grade'],
              'decision':d.get('decision'),'conf':d.get('confidence'),
+             'rsi6rt':_mtc.get('rsi6Realtime'),'rsi_now':_rc.get('rsi_now'),'k_now':_rc.get('k_now'),
              'reason':d.get('reason'),'factor':d.get('key_factor')})
         # P39 FIX (ACC 30 Sep): reject_cd ditulis SEBELUM save_state — dulu ditulis
         # SETELAH save terakhir (535) & save berikutnya cuma terjadi saat CONFIRMED (695)
@@ -547,11 +567,17 @@ def _iterate_inner(once=False):
         else:  # NORMAL atau Kosong
             sl_pct = _atr_f         # Ikut 100% volatilitas riil ATR koin bersangkutan (PAS DAN ADIL)
             tp_rr = 2.5             # Konsisten dengan target Scalp-Lock v7.3
+        # v12.3 FIX FLOOR: floor teknis 0.25% ditagih SETELAH ×mult — dulu floor market_snapshot
+        # (suggest naik ke 0.25) masih dikali 0.50 TIGHT => SL efektif 0.125% (audit 2 Okt:
+        # TRX 0.125% / BNB 0.105% / BCH 0.18% mati oleh wick receh; BNB MAE cuma 0.11%).
+        # Berlaku semua varian; WIDE tetap boleh > 0.25% (max()).
+        sl_pct = max(sl_pct, 0.0025)
         try:
             if _ss.get('sl_pct_suggest'):
                 _mult={'TIGHT':0.50,'WIDE':1.30}.get(variant,1.0)
                 log({'event':'atr_sl','symbol':cd['sym'],'atr_suggest':float(_ss.get('sl_pct_suggest')),
-                     'msg':f'SL = ATR14x1.5 x{_mult} (v8.0 PURE ATR)'})
+                     'mult':_mult,'final_sl_pct':round(sl_pct*100,4),
+                     'msg':f'SL = ATR14x1.5 x{_mult} (v8.0 PURE ATR) · v12.3 floor 0.25% post-mult'})
         except Exception: pass
         # (P32 ATR-SL lama DIGABUNG ke blok v8.0 di atas — ATR kini basis utama SL,
         # bukan widening-only; blok _sug_f>sl_pct DIHAPUS per directive v8.0.)
