@@ -224,7 +224,7 @@ def fmt_open(e):
         + NL + f"🛡️ SL     <code>{e['sl']}</code>  {sl_pct:+.2f}%{var_txt}"
         + NL + DIV
         + NL + f"🧭 Regime {e.get('regime','?')}"
-        + NL + f"🧠 Real prob: {conf}/100"
+        + NL + f"🧠 Bos conf: {conf}/100"
         + NL + _bos_line().replace('🤖 ','🤖 ')
         + NL + f"🧠  <i>{e.get('reason','')}</i>"
         + mom + loc38 + smc

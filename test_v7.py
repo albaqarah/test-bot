@@ -272,38 +272,6 @@ _m2=ds.build_payload_v7('X',_mkser2(),'LONG','A','fade','RANGE',0.0,{'15m':{},'1
 check('v12.0 perilaku kurir: LONG closePos 18.2 + bbTouch LOWER + candleAna negatif',
       abs(_m2['metrics']['closePos']-18.2)<0.5 and _m2['metrics']['bbTouch']=='LOWER'
       and _m2['metrics']['candleAna']<-50, str(_m2['metrics']))
-# ---------- 5i. v12.1 REAL PROBABILITY (revive rubric P34) ----------
-check('v12.1 build_questions: 11 jawaban (1 choice + 8 rubric + 2 noul)',
-      len(jb.build_questions({'source':'fade','side':'S','symbol':'X'}))==11
-      and all(nm in jb.build_questions({'source':'fade','side':'S','symbol':'X'}) for nm,_,_,_ in jb.RUBRIC_V12)
-      and 'noul_invalidate' in jb.build_questions({'source':'fade','side':'S','symbol':'X'}))
-check('v12.1 rubric_total: sempurna = 100, bobot timing & fakeout 2x',
-      jb.rubric_total({nm:{'score':4} for nm,_,_,_ in jb.RUBRIC_V12} | {'noul_invalidate':{'noul':0.0},'noul_flip':{'noul':0.0}})[0]==100)
-_t1,_=jb.rubric_total({**{nm:{'score':2} for nm,_,_,_ in jb.RUBRIC_V12},'rs_timing':{'score':4},'rs_fakeout':{'score':4},'noul_invalidate':{'noul':0.0},'noul_flip':{'noul':0.0}})
-check('v12.1 rubric_total: weighted math benar (6x2 + 2x4x2 = 28/40 = 70)', _t1==70)
-_t2,_=jb.rubric_total({nm:{'score':4} for nm,_,_,_ in jb.RUBRIC_V12} | {'noul_invalidate':{'noul':0.9},'noul_flip':{'noul':0.8}})
-check('v12.1 noul veto: rata >= 0.75 -> -20 (100 -> 80)', _t2==80)
-def _rub_mock(score, noul=0.0, choice='CONFIRMED_NORMAL'):
-    a={'decision':{'choice':choice,'probabilities':{'CONFIRMED_NORMAL':0.6},'confidence':0.9}}
-    for nm,_,_,_ in jb.RUBRIC_V12: a[nm]={'score':score}
-    a['noul_invalidate']={'noul':noul}; a['noul_flip']={'noul':noul}
-    return {'answers':a}
-_br={'symbol':'XUSDT','side':'LONG','mss':'MSS_BULLISH','engine':'trend','grade':'A'}
-jb._req=lambda p: _rub_mock(1)
-_r=jb.call_jev(_br)
-check('v12.1 gate KILL: rubric 25 (bobot 2x) <50 -> CONFIRMED dibuang REJECT', _r['decision']=='REJECT' and 'RUBRIC KILL 25' in _r['reason'], str(_r)[:180])
-jb._req=lambda p: _rub_mock(2)
-_r=jb.call_jev(_br)
-check('v12.1 gate WAIT: rubric 50 (bobot 2x) di 50-64 -> CONFIRMED dibuang REJECT', _r['decision']=='REJECT' and 'RUBRIC WAIT 50' in _r['reason'], str(_r)[:180])
-jb._req=lambda p: _rub_mock(4)
-_r=jb.call_jev(_br)
-check('v12.1 SHIP: rubric 100 >=65 -> CONFIRMED + confidence = skor HOST (bukan self-report 0.9)',
-      _r['decision']=='CONFIRMED' and _r['confidence']==100 and 'rubric 100' in _r['reason'], str(_r)[:180])
-jb._req=lambda p: {'answers':{'decision':{'choice':'CONFIRMED_NORMAL','probabilities':{'CONFIRMED_NORMAL':0.6},'confidence':0.5}}}
-_r=jb.call_jev(_br)
-check('v12.1 fail-open: rubric gak dijawab utuh -> choice diteruskan (conf 0, tag None)',
-      _r['decision']=='CONFIRMED' and _r['confidence']==0 and '[rubric None]' in _r['reason'])
-check('v12.1 tg: label Real prob (Bos conf musnah)', 'Real prob' in _tg and 'Bos conf' not in _tg)
 
 # ---------- 6. PAYLOAD KONTRAK v7 ----------
 ds.btc_bias=lambda: {'bias':'UP','b5':'UP','b1':'UP'}

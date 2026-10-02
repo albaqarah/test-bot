@@ -13,18 +13,6 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 ---
 
 
-## CHANGELOG v12.1 (2 Okt) - REAL PROBABILITY (revive rubric P34, ACC user)
-- Diagnosis: conf self-report LLM gak punya nilai prediksi (48 jam: WIN avg 35.9 vs LOSE 33.9 = noise;
-  conf 60-62 malah LOSE). DOGE conf 94 -> REJECT = bukti tambahan.
-- Bos v12.1: 1 choice + 8 rubric score (0-4, kriteria 5 item eksplisit ala P34) + 2 noul = 11 jawaban
-  dlm SATU request (biaya sama). Rubric dikalibrasi payload v12: session_fit diganti rs_fakeout
-  (closePos/bbTouch/consec), timing pakai atrDistance/retracePct/AT-TURN; bobot timing & fakeout x2.
-- confidence = REAL PROBABILITY dihitung HOST (rubric_total, noul veto >=0.75 -> -20) - self-report
-  LLM dimusnahkan. Gate era P34: <50 KILL, 50-64 WAIT (CONFIRMED dibuang), >=65 SHIP. Fail-open:
-  rubric tak terjawab utuh -> choice diteruskan (conf 0, tag [rubric None]).
-- A+ pre-emptive: confidence = 100 (deterministic host rule).
-- Panel TG: "Bos conf" -> "Real prob". Reason tag [rubric NN]. test_v7 106/106.
-
 ## CHANGELOG v12.0 (2 Okt) - TRUE SCALPER GOD (ACC user: rombak kurir+bos)
 - Diagnosis 24 jam: WR 57% tapi netto -1.19 (SL rata -0.21 vs WIN-LOCK +0.06); DOGE LONG conf 94
   REJECT = CRITERIA bermasalah, bukan sekadar LLM pelit.

@@ -61,87 +61,6 @@ CRITERIA={
  "REJECT":           "Layak ditolak: sinyal leleh (closePos dekat 50) / FAKEOUT (breakout close balik ke tengah, wick lawan besar, candleAna lemah) / CHASE > 3.0 ATR dari swing (entry telat, harga sudah lari - WAJIB WAIT_FOR_RETRACE_TO_FVG) / MISSING_STRUCTURE_CONFIRMATION (mss NONE tanpa pengecualian fade) / fade tanpa volume climax (INVALID_FADE_NO_CLIMAX_VOLUME: butuh RSI6 ekstrem + volx >= 1.2 + wick_ratio_pct >= 40% bersamaan) / melawan arah besar TANPA tanda pelelahan apa pun.",
 }
 
-# ===================== v12.1 REAL PROBABILITY RUBRIC (revive era P34, ACC user) =====================
-# Bukti 48 jam: conf self-report LLM WIN 35.9 vs LOSE 33.9 = NOISE, tanpa nilai prediksi.
-# Ganti: bos jawab 8 rubric 0-4 + 2 noul dlm request yg sama (biaya sama), skor 0-100
-# DIHITUNG HOST dari kriteria teks = real probability. Bobot timing & fakeout x2 (jantung scalper).
-RUBRIC_V12=[
- ("rs_quality","KUALITAS SETUP","Kualitas setup keseluruhan berdasar payload",
-  ["0 = Sinyal sampah: hampir semua lapisan melawan",
-   "1 = Lemah: 1-2 bukti pendukung saja",
-   "2 = Medioker: bukti campur, tidak yakin",
-   "3 = Bagus: mayoritas lapisan searah",
-   "4 = Sempurna: RSI6 ekstrem + closePos ujung + volx climax + MSS/FVG searah"]),
- ("rs_timing","TIMING & FRESHNESS (bobot 2x)","Segar tidaknya entry di pucuk/lembah",
-  ["0 = Telat: CHASE jauh dari swing (atrDistance > 3 ATR)",
-   "1 = Ketinggalan: gerakan utama lewat, retracePct sudah dalam",
-   "2 = Netral: harga di tengah jalan (entryStatus MID)",
-   "3 = Cepat: baru berbalik, retracePct mulai > 0",
-   "4 = Lemparan awal di pucuk/lembah: AT-TURN + RSI6 ekstrem + retrace baru mulai"]),
- ("rs_fakeout","ANTI-FAKEOUT LENS (bobot 2x)","Kejujuran candle: bukan jebakan breakout",
-  ["0 = FAKEOUT klasik: closePos dekat 50 + wick lawan besar + candleAna lemah",
-   "1 = Sinyal leleh: closePos 40-60, arah ragu",
-   "2 = Netral: closePos agak ujung tapi tanpa bbTouch",
-   "3 = Kuat: closePos jauh dr 50 searah, candleAna tebal",
-   "4 = Murni: closePos ekstrem (>85/<15) + bbTouch searah + consec masih muda (<5)"]),
- ("rs_trend","TREND & MONEY-FLOW ALIGNMENT","Keselarasan 15m/1h + BTC bias + SuperFlow",
-  ["0 = Melawan BTC bias dan HTF tanpa tanda pelelahan",
-   "1 = Lawan mayoritas lapisan",
-   "2 = Campur: ada tanda pelelahan tapi lemah",
-   "3 = Mayoritas searah / kontra dgn pelelahan jelas + climax",
-   "4 = Searah penuh: HTF + BTC bias + money flow satu arah"]),
- ("rs_rr","RR & LOKASI ENTRY","Kualitas risk-reward dari lokasi",
-  ["0 = Entry tengah range / lokasi jelek",
-   "1 = Lokasi bawah standar",
-   "2 = RR standar",
-   "3 = Bagus: dekat FVG/zona kunci",
-   "4 = Tepat di ekstrem: SL 0.5x ATR masih di balik struktur mikro"]),
- ("rs_vol","VOLATILITY FIT","Cocok tidaknya volatilitas dgn scalp 5m & TP 0.6-1.5%",
-  ["0 = Volatilitas mati (volx kopong, 1x ATR gak cukup utk TP 0.6%)",
-   "1 = Vol tidak cocok utk scalp",
-   "2 = Vol normal",
-   "3 = Vol sehat: 1x ATR 5m mencukupi TP band",
-   "4 = Sempurna: climax volume (volx >= 1.5) searah dgn ATR pas utk TP 0.6-1.5%"]),
- ("rs_struct","STRUKTUR MIKRO (MSS/FVG)","Kualitas struktur SMC 5m",
-  ["0 = Struktur melawan arah (MSS lawan)",
-   "1 = Struktur lemah/abu-abu",
-   "2 = Netral (MSS NONE tapi fade beralasan)",
-   "3 = MSS searah",
-   "4 = MSS + FVG searah sekaligus"]),
- ("rs_regime","REGIME FIT","Kecocokan arah dgn regime pasar",
-  ["0 = Kontra regime keras tanpa konfirmasi",
-   "1 = Kontra regime dgn konfirmasi tipis",
-   "2 = Netral (RANGE, fade ujung)",
-   "3 = Searah regime",
-   "4 = Searah regime + ekstrem RSI6 = peluang ganda"]),
-]
-
-def rubric_total(ans):
-    """v12.1: total rubric 0-100 (timing & fakeout x2). Return (total, detail) atau (None,{})."""
-    tot=0.0; maxw=0.0; detail={}
-    for name,label,inst,crit in RUBRIC_V12:
-        a=ans.get(name) or {}
-        val=None
-        for k in ('score','value','choice','confidence'):
-            if isinstance(a.get(k),(int,float)): val=float(a[k]); break
-            if isinstance(a.get(k),str):
-                try: val=float(a[k]); break
-                except Exception: pass
-        if val is None: return None,{}
-        val=max(0.0,min(4.0,val))
-        w=2.0 if name in ('rs_timing','rs_fakeout') else 1.0
-        tot+=val*w; maxw+=4.0*w
-        detail[name]=round(val,1)
-    if maxw<=0: return None,{}
-    total=round(tot/maxw*100)
-    # noul veto (P34 verbatim): rata2 noul >= 0.75 = risiko gugur/flip ekstrem -> potong 20 poin
-    nv=[float(a.get('noul')) for a in (ans.get('noul_invalidate'),ans.get('noul_flip'))
-        if isinstance(a,dict) and isinstance(a.get('noul'),(int,float))]
-    if nv:
-        detail['noul_risk']=round(sum(nv)/len(nv),2)
-        if sum(nv)/len(nv)>=0.75: total=max(0,total-20)
-    return total, detail
-
 def _context(brief):
     """1 baris konteks minimal (bukan framing scoring — cuma label)."""
     src=str(brief.get('source',''))
@@ -150,15 +69,11 @@ def _context(brief):
     return f"Sinyal kurir: {sym} {side} (engine={src}). Payload JSON lengkap ada di state."
 
 def build_questions(brief):
-    """v12.1: 1 choice + 8 score rubric + 2 noul = 11 jawaban dlm SATU request (biaya sama, era P32)."""
+    """v10.1: SATU pertanyaan choice — bos analisis internal (PURE ATR + SuperFlow + MSS/FVG) lalu pilih."""
     q={"decision":{"type":"choice",
         "instructions":SYSTEM_IMMUNITY+"\n\n"+PERSONA_V7+"\n\nKONTEKS:\n"+_context(brief)+
             "\n\nAnalisis internal payload JSON sebagai scalper TRUE 5-menit: baca lembah/pucuk via RSI6 realtime + lensa anti-fakeout (closePos, retracePct, bbTouch, consec, candleAna), cek regime & BTC bias sebagai kekuatan gerak, identifikasi fakeout sebelum menembak. Pilih opsi terakurat untuk TP 0.6-1.5% ke depan.",
         "criteria":CRITERIA}}
-    for name,label,inst,crit in RUBRIC_V12:
-        q[name]={"type":"score","instructions":f"{label} — {inst}. Pilih SATU angka 0-4 dari kriteria.","criteria":crit}
-    q["noul_invalidate"]={"type":"noul","instructions":"Seberapa besar RISIKO trade ini GUGUR (invalidasi)? 0=tidak ada, 1=hampir pasti gugur."}
-    q["noul_flip"]={"type":"noul","instructions":"Seberapa mudah bias ini KEBALIK oleh sinyal baru? 0=sangat stabil, 1=sangat rapuh."}
     return q
 
 # ===================== TYPE-GUARD + KOMPILASI KEPUTUSAN =====================
@@ -179,10 +94,11 @@ def call_jev(brief, symbol=''):
     probs=a.get('probabilities',{}) or {}
     try: probs={str(k):float(v) for k,v in probs.items()}
     except Exception: probs={}
+    conf=a.get('confidence')
+    try: conf=float(conf) if conf is not None else None
+    except Exception: conf=None
 
-    # v12.1: confidence = REAL PROBABILITY (skor rubric 0-100 dihitung HOST di bawah) —
-    # bukan self-report LLM (bukti 48 jam: WIN 35.9 vs LOSE 33.9 = noise).
-    out={"decision":"REJECT","variant":"","confidence":0,
+    out={"decision":"REJECT","variant":"","confidence":round(conf*100) if conf is not None else 0,
          "reason":"","key_factor":"jev-v7","probs":probs}
 
     # --- TYPE-GUARD: decision harus salah satu kontrak ---
@@ -204,7 +120,6 @@ def call_jev(brief, symbol=''):
     if _grade=='A+':
         out["decision"]="CONFIRMED"
         out["variant"]="TIGHT"
-        out["confidence"]=100  # deterministic host rule (pucuk/lembah absolut) — bukan self-report
         out["reason"]="PRE-EMPTIVE COPET v11.0: Terdeteksi Pucuk/Lembah Absolut Berdasarkan Volume Climax & RSI6. Eksekusi Sebelum Longsor."
         return out
 
@@ -252,32 +167,11 @@ def call_jev(brief, symbol=''):
         return out
 
     pj=', '.join(f"{k} {v:.2f}" for k,v in sorted(probs.items(), key=lambda x:-x[1])[:3])
-    # ===== [v12.1 REAL PROBABILITY GATE - HOST COMPUTED] =====
-    # Skor 0-100 dihitung HOST dr 8 rubric + 2 noul (kriteria teks -> angka). Gate era P34:
-    # <50 KILL, 50-64 WAIT (CONFIRMED dibuang), >=65 SHIP. Fail-open: rubric tak terjawab
-    # utuh -> total None -> keputusan choice diteruskan (conf 0, dilaporkan).
-    total, detail = rubric_total(ans)
-    out["rubric"]=total
-    if total is not None: out["rubric_detail"]=detail
-    if total is not None and out["decision"]=="CONFIRMED":
-        if total<50:
-            out["decision"]="REJECT"; out["variant"]=""
-            out["reason"]=f"RUBRIC KILL {total}<50 (real-prob): {detail}"
-            return out
-        if total<65:
-            out["decision"]="REJECT"; out["variant"]=""
-            out["reason"]=f"RUBRIC WAIT {total} 50-64 (real-prob): {detail}"
-            return out
-    if total is not None:
-        out["confidence"]=total
-        tag=f" [rubric {total}]" + (f" [noul {detail.get('noul_risk')}]" if 'noul_risk' in detail else "")
-    else:
-        tag=" [rubric None]"
     if out["decision"]=="CONFIRMED":
-        out["reason"]=f"bos v12 CONFIRMED_{out['variant']} (p: {pj}){tag}"
+        out["reason"]=f"bos v7 CONFIRMED_{out['variant']} (p: {pj})"
     else:
         # Ragu-ragu yang layak REJECT tetap sah (P8) — tapi laporkan penuh
-        out["reason"]=f"bos v12 REJECT (p: {pj}){tag}"
+        out["reason"]=f"bos v7 REJECT (p: {pj})"
     return out
 
 if __name__=='__main__':
