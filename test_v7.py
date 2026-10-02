@@ -400,7 +400,7 @@ _r6=rb.rsi6([float(x[4]) for x in _kk]+[101.0])[-1]
 check('v12.3 lens math: rsi6(closes + float tick) jalan', _r6 is not None and 0<=_r6<=100, str(_r6))
 # (f) wiring & floor via source-check (bukan import ulang dewa_live)
 _src=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'dewa_live.py')).read()
-check('v12.3.1 SL floor 0.7% ditagih POST-mult', 'sl_pct = max(sl_pct, 0.007)' in _src, '')
+check('v12.3.2 SL floor 1.5% ditagih POST-mult', 'sl_pct = max(sl_pct, 0.015)' in _src, '')
 check('v12.3 silent-kill lens MUSNAH (tanpa list nyempul di CALL)', '+[[0,0,0,0,_px,0]])' not in _src and '+[_px])' in _src, '')
 check('v12.3 wiring fresh_recheck sebelum llm_call', 0<_src.find('hr.fresh_recheck(cd')<_src.find('d=llm_call('), '')
 check('v12.3 log audit: final_sl_pct + rsi_now di decision', "'final_sl_pct'" in _src and "'rsi_now':_rc.get('rsi_now')" in _src, '')

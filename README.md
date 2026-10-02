@@ -15,12 +15,12 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 
 ## CHANGELOG
 
-## v12.3.1 (2 Okt) — SL & TRAIL LONGGAR (directive user verbatim)
-- **SL floor: 0.7% post-mult** (dulu 0.25%) — `sl_pct = max(sl_pct, 0.007)`, TIGHT ×0.50
-  tetap jalan di atasnya kalau ATR besar. Motif: micro-SL era 0.105-0.125% mati wick receh.
-- **TRAIL_ACT: 0.7%** (dulu 0.4%) — profit lock baru nempel di +0.7% (TRAIL_DIST 0.2% tetap).
-- Panel: "floor 0.7% post-mult" + "kunci +0.7%". Test 113/113. HANYA 2 ini — selebihnya
-  v12.3 utuh.
+## v12.3.2 (2 Okt) — SL FLOOR 1.5% + TRAIL LOCK 0.7% (directive user)
+- **SL floor: 1.5% post-mult** — `sl_pct = max(sl_pct, 0.015)`. Koreksi: v12.3.1 sempat
+  salah set floor 0.7% (angka itu milik TRAIL lock). SL paling dangkal sekarang 1.5%.
+- **TRAIL_ACT: 0.7%** (dulu 0.4%) + TRAIL_DIST 0.2% — profit lock mulai nempel di +0.7%,
+  lalu SL trailing 0.2% di belakang puncak profit.
+- Panel: "floor 1.5% post-mult" + "kunci +0.7% → puncak −0.2%". Test 113/113.
 
 ## v12.3 (2 Okt) — FRESH RE-CHECK (audit forensik 2 Okt, 35 trade)
 - FIX silent-kill #2: `rsi6Realtime` MATI TOTAL di produksi (list nyempul di argumen

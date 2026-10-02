@@ -567,16 +567,16 @@ def _iterate_inner(once=False):
         else:  # NORMAL atau Kosong
             sl_pct = _atr_f         # Ikut 100% volatilitas riil ATR koin bersangkutan (PAS DAN ADIL)
             tp_rr = 2.5             # Konsisten dengan target Scalp-Lock v7.3
-        # v12.3.1 FIX FLOOR (directive user 2 Okt): floor SL dinaikkan ke 0.7% — "LONGGARIN
-        # SL MINIM KE 0.7%". Dulu 0.25% (dan sebelum fix v12.3 bocor jadi 0.125% via ×0.50
-        # TIGHT). Tetap ditagih SETELAH ×mult; WIDE tetap boleh > floor (max()).
-        sl_pct = max(sl_pct, 0.007)
+        # v12.3.2 FIX FLOOR (directive user 2 Okt): floor SL = 1.5% — "SL 1.5%".
+        # (v12.3.1 sempat salah set 0.7% — itu angka TRAIL lock, bukan SL; dikoreksi.)
+        # Tetap ditagih SETELAH ×mult; WIDE/ATR besar tetap boleh > floor (max()).
+        sl_pct = max(sl_pct, 0.015)
         try:
             if _ss.get('sl_pct_suggest'):
                 _mult={'TIGHT':0.50,'WIDE':1.30}.get(variant,1.0)
                 log({'event':'atr_sl','symbol':cd['sym'],'atr_suggest':float(_ss.get('sl_pct_suggest')),
                      'mult':_mult,'final_sl_pct':round(sl_pct*100,4),
-                     'msg':f'SL = ATR14x1.5 x{_mult} (v8.0 PURE ATR) · v12.3.1 floor 0.7% post-mult'})
+                     'msg':f'SL = ATR14x1.5 x{_mult} (v8.0 PURE ATR) · v12.3.2 floor 1.5% post-mult'})
         except Exception: pass
         # (P32 ATR-SL lama DIGABUNG ke blok v8.0 di atas — ATR kini basis utama SL,
         # bukan widening-only; blok _sug_f>sl_pct DIHAPUS per directive v8.0.)
