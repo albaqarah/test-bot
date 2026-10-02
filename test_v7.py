@@ -401,6 +401,7 @@ check('v12.3 lens math: rsi6(closes + float tick) jalan', _r6 is not None and 0<
 # (f) wiring & floor via source-check (bukan import ulang dewa_live)
 _src=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'dewa_live.py')).read()
 check('v12.3.2 SL floor 1.5% ditagih POST-mult', 'sl_pct = max(sl_pct, 0.015)' in _src, '')
+check('v12.3.3 notif: engine fade/scalp/trend diteruskan ke fmt_open (DRY+LIVE)', _src.count("'engine':cd.get('src')")==2, '')
 check('v12.3 silent-kill lens MUSNAH (tanpa list nyempul di CALL)', '+[[0,0,0,0,_px,0]])' not in _src and '+[_px])' in _src, '')
 check('v12.3 wiring fresh_recheck sebelum llm_call', 0<_src.find('hr.fresh_recheck(cd')<_src.find('d=llm_call('), '')
 check('v12.3 log audit: final_sl_pct + rsi_now di decision', "'final_sl_pct'" in _src and "'rsi_now':_rc.get('rsi_now')" in _src, '')

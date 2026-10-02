@@ -611,6 +611,7 @@ def _iterate_inner(once=False):
                 tg.send(tg.fmt_open({'symbol':cd['sym'],'side':side,'grade':cd['grade'],
                              'entry':entry,'sl':sl,'tp':tp,'tp_rr':tp_rr,'qty':qty,
                              'conf':d.get('confidence'),'reason':reason,
+                             'engine':cd.get('src'),
                              'mf':(cd.get('brief') or {}).get('moneyFlow') or (cd.get('brief') or {}).get('tradfiMoneyFlow'),
                              'mss':(cd.get('brief') or {}).get('mss'),
                              'fvg':(cd.get('brief') or {}).get('fvgStatus'),
@@ -634,6 +635,7 @@ def _iterate_inner(once=False):
                              'qty':round((MARGIN*100*LEV)/entry,6),   # v7.1.1 #2: notional dinamis MARGIN*LEV (dulu hardcode 20.0)
                              'conf':d.get('confidence'),'reason':reason,
                              'variant':str(d.get('variant','')).upper(),
+                             'engine':cd.get('src'),
                              'mf':_br.get('moneyFlow') or _br.get('tradfiMoneyFlow'),
                              'mss':_br.get('mss'),
                              'fvg':_br.get('fvgStatus'),
