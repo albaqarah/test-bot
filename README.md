@@ -15,6 +15,15 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 
 ## CHANGELOG
 
+## v12.3.4 (2 Okt) — TRAIL BALIK 0.4% (user: "ga jadi pakai minim 0.7%")
+- **TRAIL_ACT 0.4%** (revert dari 0.7%) — mantulan +0.2–0.6% dilock duluan lagi;
+  SL floor **1.5% TETAP** (directive terpisah, gak dibalikin). TRAIL_DIST 0.2% tetap.
+- Panel: "kunci +0.4% → puncak −0.2%" · test v12.3.4.
+
+## v12.3.3 (2 Okt) — ENGINE LABEL DI NOTIF
+- `🧭 Engine ?` era v7 tampil beneran: FADE CLIMAX / SCALP MOMENTUM / TREND PULLBACK
+  (field `src` kurir diteruskan ke fmt_open, call site DRY+LIVE).
+
 ## v12.3.2 (2 Okt) — SL FLOOR 1.5% + TRAIL LOCK 0.7% (directive user)
 - **SL floor: 1.5% post-mult** — `sl_pct = max(sl_pct, 0.015)`. Koreksi: v12.3.1 sempat
   salah set floor 0.7% (angka itu milik TRAIL lock). SL paling dangkal sekarang 1.5%.
