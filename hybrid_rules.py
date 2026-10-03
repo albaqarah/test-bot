@@ -278,17 +278,6 @@ def fresh_recheck(cd, k_cache, rb, px=None):
         _wt = (_h - max(_o, _c2)) / _rng * 100 if _rng > 0 else 0.0
         _wb = (min(_o, _c2) - _l) / _rng * 100 if _rng > 0 else 0.0
         out['k_now'] = round(_wb if is_long else _wt, 1)
-        # 4) v12.3.5 KNIFE-GUARD (audit 3 Okt, 61 trade): LONG pas RSI6 live <= 20 DAN harga
-        #    nempel atap bar live (>= 85% range bar) = bukan dip, itu pisau jatuh —
-        #    4/5 kasus semacam ini SL (CRV/ATOM/LDO/WIF, −1.28 total). Blok sebelum bos =
-        #    perpanjangan syarat P12-LIVE (sisi ekstrem yang kebalik), bukan gate baru.
-        #    Mirror SHORT gak diaktifin: nol sample di 24 jam — jangan bikin rule tanpa bukti.
-        if is_long and r6 is not None and r6 <= 20.0 and _rng > 0:
-            _posbar = (_c2 - _l) / _rng * 100
-            if _posbar >= 85.0:
-                out['ok'] = False
-                out['why'] = f'KNIFE-GUARD: RSI6 live {r6:.1f} <= 20 & harga di {_posbar:.0f}% bar (atap) — pisau jatuh, bukan dip'
-                return out
         # 1) P12-LIVE
         if is_long and r6 is not None and r6 > 85:
             out['ok'] = False; out['why'] = f'P12-LIVE: RSI6 live {r6:.1f} > 85 — LONG dilarang (pucuk tersembunyi setelah bar sinyal)'

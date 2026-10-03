@@ -171,7 +171,7 @@ def fmt_start(saldo, n_open=0, maxpos=5, n_pair=41):
         + NL + "💵 Margin    $2.00/trade · notional $20.00"
         + NL + f"🎟️ Slot      {maxpos} · 1 posisi/pair · cd 30m"
         + NL + "🪙 Pair      41 (38 crypto + 3 logam + PAXG)"
-        + NL + "🎯 TP/SL     SL = ATR14x1.5 murni (×0.50/1.0/1.3 bos) · TP BAND 0.6–1.5% · floor 1.0% post-mult · CUT −0.3%"
+        + NL + "🎯 TP/SL     SL = ATR14x1.5 murni (×0.50/1.0/1.3 bos) · TP BAND 0.6–1.5% · floor 1.5% post-mult"
         + NL + "🛡️ BE        TRAIL aktif: kunci +0.4% → puncak −0.2%"
         + NL + _tradfi_line()
         + NL + _bos_line()
@@ -212,9 +212,7 @@ def fmt_open(e):
     try:
         _p3='MSS✅' if e.get('mss') and e.get('mss')!='NONE' else 'MSS—'
         _p4='FVG✅' if e.get('fvg') and e.get('fvg')!='NONE' else 'FVG—'
-        # v12.3.5: label SMF jujur — taker flow kontra/sepi gak boleh pamer "SUPER ✓" (audit 3 Okt)
-        _mfl='SUPER MONEY FLOW ✓' if e.get('mf') else 'MONEY FLOW — (kontra/sepi)'
-        smc+=NL+f"🧠 ANALISA · PURE ATR ✓ · {_mfl} · {_p3} · {_p4}"
+        smc+=NL+f"🧠 ANALISA · PURE ATR ✓ · SUPER MONEY FLOW ✓ · {_p3} · {_p4}"
     except Exception: pass
     r=_resume24()
     return ("🚀 <b>ENTRY</b> · "+e['symbol']+" · "+SIDE_ART.get(side,'')+f" <b>{side}</b>"
@@ -256,8 +254,7 @@ def fmt_exit(e, saldo, n_open=None):
     gross=pnl+0.02; fee=0.02
     r=_resume24()
     alasan={'TP':'take profit','WIN-LOCK':'trailing lock','LOCK':'trailing lock (nyaris fee)',
-            'BE':'breakeven guard','SL':'stop loss','TIME':'max hold',
-            'CUT':'momentum cut −0.3% (rugi dibekuk dini)'}[hit] if hit in ('TP','WIN-LOCK','LOCK','BE','SL','TIME','CUT') else hit.lower()
+            'BE':'breakeven guard','SL':'stop loss','TIME':'max hold'}[hit] if hit in ('TP','WIN-LOCK','LOCK','BE','SL','TIME') else hit.lower()
     sym=e['symbol']
     lines=[art+" "+head+" · "+sym+" · "+str(e.get('side','')),
         DIV,

@@ -15,17 +15,6 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 
 ## CHANGELOG
 
-## v12.3.5 (3 Okt) — DISIPLIN EXIT + KNIFE-GUARD + SL 1.0% (ACC user: "gw coba dulu caramu")
-Bukti sim replay 61 trade (klines 1m asli, validasi 48/61 dev-0): baseline −1.09 → **+1.02**.
-- **Momentum-CUT −0.3%** (dewa_live monitor): mv ≤ −0.3% lawan arah, belum profit-lock,
-  & SL config lebih dalam dari cut → exit `CUT` (rugi dibekuk dini, jangan tunggu SL penuh).
-- **KNIFE-GUARD** (hybrid_rules fresh_recheck): LONG dgn RSI6 live ≤20 & harga di ≥85% atap
-  bar live → blok sebelum bos (4/5 kasus 24 jam = SL: CRV/ATOM/LDO/WIF −1.28). Mirror SHORT
-  gak diaktifin (nol sample). Perpanjangan P12-LIVE, bukan gate baru.
-- **SL floor 1.0%** post-mult (directive user; dulu 1.5% — loss/win 6.6x terlalu berat).
-- **Label SMF jujur**: flow kontra/sepi = "MONEY FLOW — (kontra/sepi)", bukan "SUPER ✓".
-- fmt_exit kenal `CUT`; panel "+ CUT −0.3%"; test section 12 (v12.3.5).
-
 ## v12.3.4 (2 Okt) — TRAIL BALIK 0.4% (user: "ga jadi pakai minim 0.7%")
 - **TRAIL_ACT 0.4%** (revert dari 0.7%) — mantulan +0.2–0.6% dilock duluan lagi;
   SL floor **1.5% TETAP** (directive terpisah, gak dibalikin). TRAIL_DIST 0.2% tetap.
