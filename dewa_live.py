@@ -265,6 +265,17 @@ def manage_open(st, k_cache):
             else:
                 if fh>=p['sl']: hit=_lock_label(p['sl']); exit_px=p['sl']
                 elif fl<=p['tp']: hit='TP'; exit_px=p['tp']
+            # v12.3.5 MOMENTUM-CUT −0.3% (audit 3 Okt, sim 61 trade klines asli):
+            # harga jalan −0.3% lawan arah SEBELUM trail-lock arm & SL config lebih dalam
+            # dari cut → potong di sini (rugi dibekuk dini −0.3%, jangan tunggu SL penuh).
+            # SL/trail lebih ketat tetap menang (hit detection di atas jalan duluan);
+            # posisi udah profit-lock (be_moved) gak disentuh.
+            if hit is None and not p.get('be_moved'):
+                _cut_dist = 0.003
+                _mv_now = ((float(last[4]) - p['entry']) / p['entry']) * (1 if side == 'LONG' else -1)
+                _sl_wide = abs(p['sl'] - p['entry']) / p['entry']
+                if _mv_now <= -_cut_dist and _sl_wide > _cut_dist:
+                    hit = 'CUT'; exit_px = p['entry'] * (1 - _cut_dist) if side == 'LONG' else p['entry'] * (1 + _cut_dist)
             bars_open=(now-p['open_ts'])/300000
             maxhold=MAXHOLD_CHOP if p.get('regime')=='RANGE' else MAXHOLD
             if sym in tfs.TRADFI: maxhold=min(maxhold,48)  # P23: TradFi max 4 jam — jangan nahan floating dlm market tipis
@@ -567,10 +578,11 @@ def _iterate_inner(once=False):
         else:  # NORMAL atau Kosong
             sl_pct = _atr_f         # Ikut 100% volatilitas riil ATR koin bersangkutan (PAS DAN ADIL)
             tp_rr = 2.5             # Konsisten dengan target Scalp-Lock v7.3
-        # v12.3.2 FIX FLOOR (directive user 2 Okt): floor SL = 1.5% — "SL 1.5%".
-        # (v12.3.1 sempat salah set 0.7% — itu angka TRAIL lock, bukan SL; dikoreksi.)
+        # v12.3.5 FIX FLOOR (directive user 3 Okt): floor SL = 1.0% — "Tapi ubah juga SL KE 1%".
+        # (v12.3.2-4: 1.5% — audit 3 Okt: loss/win 6.6x, BE butuh WR 87%; sim replay: 1.0%
+        # + momentum-cut + knife-guard = +1.02 vs baseline −1.09 di 61 trade yang sama.)
         # Tetap ditagih SETELAH ×mult; WIDE/ATR besar tetap boleh > floor (max()).
-        sl_pct = max(sl_pct, 0.015)
+        sl_pct = max(sl_pct, 0.010)
         try:
             if _ss.get('sl_pct_suggest'):
                 _mult={'TIGHT':0.50,'WIDE':1.30}.get(variant,1.0)
