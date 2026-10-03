@@ -30,6 +30,7 @@ spec=importlib.util.spec_from_file_location('vg',os.path.join(os.path.dirname(os
 vg=importlib.util.module_from_spec(spec); spec.loader.exec_module(vg)
 import reversion_bot as rb
 import gmv2  # v12.2 GODMODE sensor (port v15-pro-genius, stdlib)
+import money_flow as mf  # v12.4 MATA UANG: takerflow + OI + top-trader + orderbook (fail-open)
 import dewa_skill as ds  # v7.0: build_payload_v7 (kontrak JSON bos) + btc_bias (macro)
 import order_guard as og
 import tg_notify as tg
@@ -439,6 +440,15 @@ def _iterate_inner(once=False):
                                  'score':_gmr['score'],'tier':_gmr['tier'],'setup':_gmr['setup']})
                     except Exception as _gme:
                         log({'event':'gm_err','symbol':sym,'msg':str(_gme)[:80]})
+                    # ===== v12.4 MATA UANG (A+B+C): aliran uang real buat kompas bos =====
+                    # A takerflow (dari klines, nol API) · B OI+top-trader (cache 5m) · C orderbook (cache 30dtk).
+                    # Kompas BUKAN gate: gagal fetch = field None, bos tetap ditanya.
+                    try:
+                        brief['moneyFlowReal']=mf.read_all(sym, kk, int(time.time()*1000))
+                        log({'event':'mf_read','symbol':sym,'side':side,
+                             'dom':(brief.get('moneyFlowReal') or {}).get('dominance')})
+                    except Exception as _mfe:
+                        log({'event':'mf_err','symbol':sym,'msg':str(_mfe)[:80]})
                     # P14 TRADFI GATE: blok entry 3 jam sebelum break/close (anti volume kopong)
                     if sym in tfs.TRADFI:
                         _eb,_ff,_why=tfs.tradfi_window()
@@ -612,6 +622,7 @@ def _iterate_inner(once=False):
                              'entry':entry,'sl':sl,'tp':tp,'tp_rr':tp_rr,'qty':qty,
                              'conf':d.get('confidence'),'reason':reason,
                              'engine':cd.get('src'),
+                             'moneyFlowReal':(cd.get('brief') or {}).get('moneyFlowReal'),
                              'mf':(cd.get('brief') or {}).get('moneyFlow') or (cd.get('brief') or {}).get('tradfiMoneyFlow'),
                              'mss':(cd.get('brief') or {}).get('mss'),
                              'fvg':(cd.get('brief') or {}).get('fvgStatus'),
@@ -636,6 +647,7 @@ def _iterate_inner(once=False):
                              'conf':d.get('confidence'),'reason':reason,
                              'variant':str(d.get('variant','')).upper(),
                              'engine':cd.get('src'),
+                             'moneyFlowReal':_br.get('moneyFlowReal'),
                              'mf':_br.get('moneyFlow') or _br.get('tradfiMoneyFlow'),
                              'mss':_br.get('mss'),
                              'fvg':_br.get('fvgStatus'),

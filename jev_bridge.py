@@ -68,13 +68,15 @@ def _context(brief):
     sym=str(brief.get('symbol',''))
     gm=brief.get('godmode') or {}
     gml=f" GODMODE: {gm.get('line')}" if gm.get('line') else ""
-    return f"Sinyal kurir: {sym} {side} (engine={src}).{gml} Payload JSON lengkap ada di state."
+    mfr=brief.get('moneyFlowReal') or {}
+    mfl=f" MATA UANG: {mfr.get('dominance')}" if mfr.get('dominance') else ""
+    return f"Sinyal kurir: {sym} {side} (engine={src}).{gml}{mfl} Payload JSON lengkap ada di state."
 
 def build_questions(brief):
     """v10.1: SATU pertanyaan choice — bos analisis internal (PURE ATR + SuperFlow + MSS/FVG) lalu pilih."""
     q={"decision":{"type":"choice",
         "instructions":SYSTEM_IMMUNITY+"\n\n"+PERSONA_V7+"\n\nKONTEKS:\n"+_context(brief)+
-            "\n\nAnalisis internal payload JSON sebagai scalper TRUE 5-menit: baca lembah/pucuk via RSI6 realtime + lensa anti-fakeout (closePos, retracePct, bbTouch, consec, candleAna), cek regime & BTC bias sebagai kekuatan gerak, identifikasi fakeout sebelum menembak. Payload.godmode = sensor kuantitatif GODMODE V2 dari Kurir: score 0-100 utk arah sinyal dgn tier SNIPER (>=90) / EXECUTE (>=75) / WATCH (>=71) / REJECT (<71) dan setup_type (TREND_CONTINUATION / MEAN_REVERSION) - pakai sebagai KOMPAS kuantitatif: SNIPER/EXECUTE = konfirmasi kuat utk menembak; WATCH/REJECT = hanya tembak kalau RSI6 & lensa anti-fakeout tetap kuat; jika godmode bertentangan keras dgn RSI6 realtime, jelaskan konfliknya di alasan sebelum memilih. Pilih opsi terakurat untuk TP 0.6-1.5% ke depan.",
+            "\n\nAnalisis internal payload JSON sebagai scalper TRUE 5-menit: baca lembah/pucuk via RSI6 realtime + lensa anti-fakeout (closePos, retracePct, bbTouch, consec, candleAna), cek regime & BTC bias sebagai kekuatan gerak, identifikasi fakeout sebelum menembak. Payload.godmode = sensor kuantitatif GODMODE V2 dari Kurir: score 0-100 utk arah sinyal dgn tier SNIPER (>=90) / EXECUTE (>=75) / WATCH (>=71) / REJECT (<71) dan setup_type (TREND_CONTINUATION / MEAN_REVERSION) - pakai sebagai KOMPAS kuantitatif: SNIPER/EXECUTE = konfirmasi kuat utk menembak; WATCH/REJECT = hanya tembak kalau RSI6 & lensa anti-fakeout tetap kuat; jika godmode bertentangan keras dgn RSI6 realtime, jelaskan konfliknya di alasan sebelum memilih. Payload.moneyFlowReal = sensor aliran uang REAL dari Kurir: taker_buy_ratio (30 bar 5m), OI usdt + perubahan 15m/1j, top-trader L/S, orderbook imbalance (0-1, >0.5 bid berat), spread_bps, dan dominance (LONG_LEGIT = taker beli + OI naik; SHORT_LEGIT = taker jual + OI turun; COVER_FADE_RISK = taker beli tapi OI turun, indikasi covering/jebakan; PRESSURE_WEAK = arah gak jelas) - baca sebagai BUKTI arah uang: dominance LEGIT searah sinyal = konfirmasi kuat; dominance kontra sinyal keras = sebutkan konfliknya di alasan sebelum memilih; field kosong/None = data gak tersedia, abaikan. Pilih opsi terakurat untuk TP 0.6-1.5% ke depan.",
         "criteria":CRITERIA}}
     return q
 

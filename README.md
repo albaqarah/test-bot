@@ -15,6 +15,21 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 
 ## CHANGELOG
 
+## v12.4 (3 Okt) — MATA UANG: aliran uang REAL (A+B+C semua layer, ACC user)
+Akaran: audit 3 Okt = "SUPER MONEY FLOW" lama cuma deteksi lonjakan vol BTC; trade kontra-flow
+WR 64% > seirama 56%. Senjata ada tapi gak dibaca (taker-buy kolom 9-10 kline). Modul baru:
+- **money_flow.py** (fail-open total, gagal=None, bos tetap ditanya):
+  A TakerFlow/CVD dari klines 5m (nol API baru) · B OpenInterest +chg15m/1h + top-trader L/S
+  (cache 5m) · C orderbook imbalance ±0.5% + spread bps (cache 30dtk).
+- **Dominance 4-kotak**: LONG_LEGIT (taker buy+OI naik) / SHORT_LEGIT (taker jual+OI turun) /
+  COVER_FADE_RISK (taker buy+OI turun = covering) / PRESSURE_WEAK.
+- Inject `brief.moneyFlowReal` → payload bos (JSON lengkap) + kompas di instruksi + `_context`;
+  notif: baris `💰 MATA UANG: …` + verdict di ANALISA (fallback label legacy).
+- NOL rule keras — kompas buat bos, sesuai larangan gate; smoke real: BTC OI 8.25B, XAG topL/S 4.72.
+
+## v12.3.5 (3 Okt) — DIREVERT (user: "bot penalarannya goblok") @b76da7e
+- CUT/knife-guard/SL1.0/SMF-label → musnah dari runtime (commit tetap terarsip di git).
+
 ## v12.3.4 (2 Okt) — TRAIL BALIK 0.4% (user: "ga jadi pakai minim 0.7%")
 - **TRAIL_ACT 0.4%** (revert dari 0.7%) — mantulan +0.2–0.6% dilock duluan lagi;
   SL floor **1.5% TETAP** (directive terpisah, gak dibalikin). TRAIL_DIST 0.2% tetap.

@@ -165,7 +165,7 @@ def _regime_line():
 # ---------- START / STOP / RESTART ----------
 def fmt_start(saldo, n_open=0, maxpos=5, n_pair=41):
     r=_resume24()
-    return (f"🟢 <b>BOT START · TYPESAFE SNIPER v12.3 TRUE SCALPER</b>" + NL + DIV
+    return (f"🟢 <b>BOT START · TYPESAFE SNIPER v12.4 MATA UANG</b>" + NL + DIV
         + NL + f"🧾 Mode      {_mode_line()}"
         + NL + _equity(saldo)
         + NL + "💵 Margin    $2.00/trade · notional $20.00"
@@ -212,7 +212,14 @@ def fmt_open(e):
     try:
         _p3='MSS✅' if e.get('mss') and e.get('mss')!='NONE' else 'MSS—'
         _p4='FVG✅' if e.get('fvg') and e.get('fvg')!='NONE' else 'FVG—'
-        smc+=NL+f"🧠 ANALISA · PURE ATR ✓ · SUPER MONEY FLOW ✓ · {_p3} · {_p4}"
+        # v12.4 MATA UANG: verdict dari data REAL (taker+OI), fallback label legacy
+        _dom=(e.get('moneyFlowReal') or {}).get('dominance')
+        if _dom=='LONG_LEGIT': _mfl='MONEY FLOW REAL: LONG LEGIT ✓'
+        elif _dom=='SHORT_LEGIT': _mfl='MONEY FLOW REAL: SHORT LEGIT ✓'
+        elif _dom=='COVER_FADE_RISK': _mfl='MONEY FLOW REAL: COVERING ⚠️ (jebakan?)'
+        elif _dom=='PRESSURE_WEAK': _mfl='MONEY FLOW REAL: LEMAH —'
+        else: _mfl='SUPER MONEY FLOW ✓' if e.get('mf') else 'MONEY FLOW —'
+        smc+=NL+f"🧠 ANALISA · PURE ATR ✓ · {_mfl} · {_p3} · {_p4}"
     except Exception: pass
     r=_resume24()
     return ("🚀 <b>ENTRY</b> · "+e['symbol']+" · "+SIDE_ART.get(side,'')+f" <b>{side}</b>"
@@ -230,12 +237,33 @@ def fmt_open(e):
         + mom + loc38 + smc
         + (NL + f"🎮 GODMODE: {e['godmode'].get('line')}"
             + (f" · RSI6live {e.get('rsi6')}" if e.get('rsi6') is not None else "") if (e.get('godmode') or {}).get('line') else "")
+        + _mfr_line(e.get('moneyFlowReal'))
         + NL + DIV
         + NL + f"🎟️ Slot {e.get('n_open','?')}/5 · {_equity(e.get('saldo',0)).replace('💰 Ekuitas   ','💰 Ekuitas ')}"
         + NL + f"📊 Hari ini {r['w']}W/{r['l']}L · WR {_wr(r):.1f}% · Net {r['net']:+.2f}"
         + NL + "⏰ "+_wib_now())
 
 # ---------- TRAIL LOCK ----------
+def _mfr_line(mfr):
+    """v12.4 MATA UANG: 1 baris bukti aliran uang real di notif entry. Fail-open = baris gak muncul."""
+    try:
+        if not mfr: return ""
+        t=mfr.get('taker') or {}; oi=mfr.get('oi') or {}; tp=mfr.get('top') or {}; ob=mfr.get('ob') or {}
+        parts=[]
+        if t.get('taker_buy_ratio') is not None: parts.append(f"takerBuy {t['taker_buy_ratio']*100:.0f}%")
+        if oi.get('oi_usdt') is not None:
+            _o=f"OI {oi['oi_usdt']/1e6:.1f}M"
+            if oi.get('chg_15m_pct') is not None: _o+=f" ({oi['chg_15m_pct']:+.1f}%/15m"
+            if oi.get('chg_1h_pct') is not None: _o+=f", {oi['chg_1h_pct']:+.1f}%/1j"
+            if oi.get('chg_15m_pct') is not None: _o+=")"
+            parts.append(_o)
+        if tp.get('ls_top') is not None: parts.append(f"topL/S {tp['ls_top']}")
+        if ob.get('ob_imbalance') is not None:
+            parts.append(f"ob {ob['ob_imbalance']:.2f}"+(f" · sprd {ob['spread_bps']}bps" if ob.get('spread_bps') is not None else ""))
+        if not parts: return ""
+        return NL+f"💰 MATA UANG: {mfr.get('dominance') or 'N/A'} · "+" · ".join(parts)
+    except Exception:
+        return ""
 
 # ---------- CLOSED (gaya v15) ----------
 def fmt_exit(e, saldo, n_open=None):
