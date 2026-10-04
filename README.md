@@ -15,6 +15,9 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 
 ## CHANGELOG
 
+## v12.4.1 (4 Okt) — SL FLOOR 1.0% (directive user; dulu 1.5%)
+- `sl_pct = max(sl_pct, 0.010)` post-mult — SL paling dangkal 1.0%. Panel + test sinkron.
+
 ## v12.4 (3 Okt) — MATA UANG: aliran uang REAL (A+B+C semua layer, ACC user)
 Akaran: audit 3 Okt = "SUPER MONEY FLOW" lama cuma deteksi lonjakan vol BTC; trade kontra-flow
 WR 64% > seirama 56%. Senjata ada tapi gak dibaca (taker-buy kolom 9-10 kline). Modul baru:

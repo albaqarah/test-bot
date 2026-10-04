@@ -577,10 +577,10 @@ def _iterate_inner(once=False):
         else:  # NORMAL atau Kosong
             sl_pct = _atr_f         # Ikut 100% volatilitas riil ATR koin bersangkutan (PAS DAN ADIL)
             tp_rr = 2.5             # Konsisten dengan target Scalp-Lock v7.3
-        # v12.3.2 FIX FLOOR (directive user 2 Okt): floor SL = 1.5% — "SL 1.5%".
-        # (v12.3.1 sempat salah set 0.7% — itu angka TRAIL lock, bukan SL; dikoreksi.)
+        # v12.4.1 FIX FLOOR (directive user 4 Okt): floor SL = 1.0% — "SL 1.5 diganti ke SL 1.0 aja".
+        # (v12.3.2-12.4: 1.5%; era 1.5% di-audit 3 Okt: loss/win 6.6x.)
         # Tetap ditagih SETELAH ×mult; WIDE/ATR besar tetap boleh > floor (max()).
-        sl_pct = max(sl_pct, 0.015)
+        sl_pct = max(sl_pct, 0.010)
         try:
             if _ss.get('sl_pct_suggest'):
                 _mult={'TIGHT':0.50,'WIDE':1.30}.get(variant,1.0)

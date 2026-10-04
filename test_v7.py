@@ -400,7 +400,7 @@ _r6=rb.rsi6([float(x[4]) for x in _kk]+[101.0])[-1]
 check('v12.3 lens math: rsi6(closes + float tick) jalan', _r6 is not None and 0<=_r6<=100, str(_r6))
 # (f) wiring & floor via source-check (bukan import ulang dewa_live)
 _src=open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'dewa_live.py')).read()
-check('v12.3.2 SL floor 1.5% ditagih POST-mult', 'sl_pct = max(sl_pct, 0.015)' in _src, '')
+check('v12.4.1 SL floor 1.0% ditagih POST-mult', 'sl_pct = max(sl_pct, 0.010)' in _src, '')
 check('v12.3.3 notif: engine fade/scalp/trend diteruskan ke fmt_open (DRY+LIVE)', _src.count("'engine':cd.get('src')")==2, '')
 check('v12.4 money_flow.py: modul MATA UANG ada (takerflow+OI+toptrader+orderbook, fail-open)', os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)),'money_flow.py')) and 'def read_all' in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'money_flow.py')).read() and 'except Exception' in open(os.path.join(os.path.dirname(os.path.abspath(__file__)),'money_flow.py')).read(), '')
 check('v12.4 wiring: brief.moneyFlowReal diinject + log mf_read', "brief['moneyFlowReal']=mf.read_all" in _src and "'event':'mf_read'" in _src, '')

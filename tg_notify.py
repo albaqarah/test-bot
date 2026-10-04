@@ -171,7 +171,7 @@ def fmt_start(saldo, n_open=0, maxpos=5, n_pair=41):
         + NL + "💵 Margin    $2.00/trade · notional $20.00"
         + NL + f"🎟️ Slot      {maxpos} · 1 posisi/pair · cd 30m"
         + NL + "🪙 Pair      41 (38 crypto + 3 logam + PAXG)"
-        + NL + "🎯 TP/SL     SL = ATR14x1.5 murni (×0.50/1.0/1.3 bos) · TP BAND 0.6–1.5% · floor 1.5% post-mult"
+        + NL + "🎯 TP/SL     SL = ATR14x1.5 murni (×0.50/1.0/1.3 bos) · TP BAND 0.6–1.5% · floor 1.0% post-mult"
         + NL + "🛡️ BE        TRAIL aktif: kunci +0.4% → puncak −0.2%"
         + NL + _tradfi_line()
         + NL + _bos_line()
