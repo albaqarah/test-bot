@@ -15,6 +15,11 @@ cleanup otomatis SL/TP nyantol, morning briefing harian, **panel tuning .env**,
 
 ## CHANGELOG
 
+## v12.4.2 (4 Okt) — SL FLOOR 0.3% (directive user; dulu 1.0%)
+- `sl_pct = max(sl_pct, 0.003)` post-mult. Nota data: SL 0.3% < TRAIL arm 0.4% → trade rugi
+  bakal mati duluan sebelum sempet lock (pola era A: WR tinggi, net tipis); wick receh
+  0.2-0.3% bisa matiin entry bagus. Panel + test sinkron.
+
 ## v12.4.1 (4 Okt) — SL FLOOR 1.0% (directive user; dulu 1.5%)
 - `sl_pct = max(sl_pct, 0.010)` post-mult — SL paling dangkal 1.0%. Panel + test sinkron.
 
