@@ -3,7 +3,7 @@
 dewa_live.py — BOT LIVE FINAL v7.0 (dry-run mode default: eksekusi virtual).
 Pipeline v7.0: Data -> KURIR v7 (3 engine preset + HIGHER TF FILTER) -> payload JSON
 -> BOS jev persona v7.0 (pipeline P1-P8, tanpa rubric) -> Risk gate (max 5 posisi)
--> Eksekusi virtual (SL/TP varian, ATR murni v10.0) -> Janitor SL/TP + trail-lock P10b.
+-> Eksekusi virtual (SL/TP varian + clamp) -> Janitor SL/TP + trail-lock P10b.
 
 Usage: python3 dewa_live.py --pairs ALL --once   (1 iterasi, untuk cron)
        python3 dewa_live.py --pairs ALL          (loop terus)
@@ -29,8 +29,6 @@ _load_env()
 spec=importlib.util.spec_from_file_location('vg',os.path.join(os.path.dirname(os.path.abspath(__file__)),'v15_grade.py'))
 vg=importlib.util.module_from_spec(spec); spec.loader.exec_module(vg)
 import reversion_bot as rb
-import gmv2  # v12.2 GODMODE sensor (port v15-pro-genius, stdlib)
-import money_flow as mf  # v12.4 MATA UANG: takerflow + OI + top-trader + orderbook (fail-open)
 import dewa_skill as ds  # v7.0: build_payload_v7 (kontrak JSON bos) + btc_bias (macro)
 import order_guard as og
 import tg_notify as tg
@@ -50,6 +48,8 @@ FEE=0.0005
 LEV=_cfg('LEVERAGE',10,int)
 MARGIN=_cfg('MARGIN_USD',2.0)/100.0     # env = margin USD beneran ($2 = $2); internal x100
 SL_PCT=_cfg('SL_PCT',0.004)             # SL = % dari harga entry
+TP_RR_TREND=_cfg('TP_RR_TREND',3.0)     # RR saat regime TREND_UP/DOWN
+TP_RR_CHOP=_cfg('TP_RR_CHOP',2.0)       # RR saat regime RANGE (chop sniper)
 TRAIL_ACT=_cfg('TRAIL_ACT',0.003)       # P10b: mulai ngunci profit saat mv >= ini
 TRAIL_DIST=_cfg('TRAIL_DIST',0.002)     # P10b: SL mengunci sejauh ini di belakang ekstrem harga (trailing)
 TRAIL=str(os.environ.get('TRAIL','on')).split('#',1)[0].strip().lower() in ('on','1','true','yes')  # P10b toggle
@@ -107,18 +107,6 @@ def live_px(sym):
             f"https://fapi.binance.com/fapi/v1/ticker/price?symbol={sym}",timeout=8).read())['price'])
     except Exception:
         return None
-
-def smc_btc_volume():
-    """v9.0 Super Money Flow: rasio volume 3-bar terakhir BTC vs SMA20 — suntikan dana pasar.
-    None kalau data gagal (fail-open: kurir jalan normal tanpa sinyal superflow)."""
-    try:
-        kk=fetch_hist_klines('BTCUSDT','5m',25)
-        v=[float(x[5]) for x in kk]
-        vma=sum(v[-23:-3])/20 or 1e-9
-        return round(sum(v[-3:])/(3*vma),2)
-    except Exception:
-        return None
-
 
 def fund_last(sym):
     try:
@@ -200,7 +188,7 @@ def manage_open(st, k_cache):
                         continue
                     p['tradfi_eod_done']=True
                     exit_px=live_px(sym) or p['entry']
-                    qty=p.get('qty') or (MARGIN*100*LEV)/p['entry']   # v7.1.1 #2: notional dinamis (dulu hardcode 20.0)
+                    qty=p.get('qty') or 20.0/p['entry']
                     side=p['side']
                     pnl=(exit_px-p['entry'])*qty*(1 if side=='LONG' else -1)
                     pnl=round(pnl-0.02,2)  # fee taker
@@ -361,7 +349,6 @@ def _iterate_inner(once=False):
     # 2) kurir: cari kandidat baru di candle TERTUTUP terakhir
     n_open=len(st['open'])
     candidates=[]
-    pending_sides=set()  # v7.1.1 #1: dedup intra-batch (sym,side) — 1 pasangan 1 panggilan bos per batch
     done={(d[0],d[1],d[2]) for d in st.get('done',[])}  # dedup: load SEKALI sebelum loop pair
     for sym in PAIRS:
         try:
@@ -377,8 +364,7 @@ def _iterate_inner(once=False):
             maps=hr.build_htf_maps(sym,len(kk))
             kts=[r[0] for r in kk]
             htf15=hr.align_htf(kts, maps['15m'])   # forward-fill: bar 15m terakhir utk tiap 5m
-            btcv=smc_btc_volume()  # v9.0 Super Money Flow: volume 3-bar BTC utk kurir
-            sigs=hr.gen_hybrid(kk,rs,zz,vsma,htf15,maps['1h_struct'],btcv=btcv)  # v11.0 FIX: dulu positional jatuh ke slot extra_engines (mati) — SuperFlow hidup
+            sigs=hr.gen_hybrid(kk,rs,zz,vsma,htf15,maps['1h_struct'])
             # dedup via done-set (sym,bar_ts,side) — di-load sekali di atas, BUKAN per-pair reset
             for (si,side,grade,src) in sigs:
                 i=si
@@ -401,7 +387,7 @@ def _iterate_inner(once=False):
                     except Exception: pass
                     try:
                         import market_snapshot as _mkt
-                        _mkt.enrich_market(brief, sym, kk, rs, i=i)   # v7.1: entryLoc diukur di bar kandidat
+                        _mkt.enrich_market(brief, sym, kk, rs)
                         if brief.get('wickHint') and brief['wickHint'].get('dir')!='NONE':
                             log({'event':'wick_hint','symbol':sym,'side':side,
                                  'hint':brief['wickHint'].get('dir'),
@@ -411,55 +397,15 @@ def _iterate_inner(once=False):
                     try:
                         _px=live_px(sym)
                         if _px:
-                            # v12.3 FIX SILENT-KILL: elemen terakhir WAJIB float (_px), dulu [[0,0,0,0,_px,0]]
-                            # (list nyempul) -> TypeError -> except:pass -> lensa RSI6 live MATI TOTAL di produksi.
-                            # 60-bar (bukan 19) + tick live = selaras dgn seri rules (rs dari 600 bar).
                             brief.setdefault('metrics',{})['rsi6Realtime']=round(
-                                rb.rsi6([float(r[4]) for r in kk[-60:]]+[_px])[-1],1)
+                                rb.rsi6([float(r[4]) for r in kk[-19:]]+[[0,0,0,0,_px,0]])[-1],1)
                     except Exception: pass
-                    # v7.1 ANTI-CHASE DATA PLUMBING: entryLoc (host, gratis) -> metrics kontrak bos.
-                    # Bos P5 (ANTI-CHASE COMPILER GUARD) WAJIB REJECT + WAIT_FOR_RETRACE_TO_FVG
-                    # saat entryStatus=CHASE / atrDistance > 3.0.
-                    try:
-                        _el=brief.get('entryLoc') or {}
-                        if _el.get('loc'):
-                            brief.setdefault('metrics',{})['entryStatus']=str(_el['loc']).upper()
-                            brief['metrics']['atrDistance']=_el.get('swing_dist_atr')
-                            brief['metrics']['swingAgeBars']=_el.get('swing_age_bars')
-                    except Exception: pass
-                    # ===== v12.2 GODMODE SENSOR (port v15-pro-genius/godmode_v2_engine, stdlib) =====
-                    # FeatureEngine + GodModeScorer: skor kuantitatif 0-100 utk ARAH SINYAL
-                    # (trend/momentum/mtf/liquidity/volume/volatility/session + tier SNIPER/EXECUTE/
-                    # WATCH/REJECT). Bot TETAP bosnya jev — GM cuma kompas tambahan di payload.godmode.
-                    try:
-                        _gmr=gmv2.evaluate(kk[:i+1], maps.get('c15'), 'LONG' if side=='L' else 'SHORT', rs[:i+1])
-                        if _gmr:
-                            brief['godmode']={'score':_gmr['score'],'tier':_gmr['tier'],
-                                'setup':_gmr['setup'],'breakdown':_gmr['breakdown'],'line':_gmr['line']}
-                            log({'event':'gm_score','symbol':sym,'side':side,
-                                 'score':_gmr['score'],'tier':_gmr['tier'],'setup':_gmr['setup']})
-                    except Exception as _gme:
-                        log({'event':'gm_err','symbol':sym,'msg':str(_gme)[:80]})
-                    # ===== v12.4 MATA UANG (A+B+C): aliran uang real buat kompas bos =====
-                    # A takerflow (dari klines, nol API) · B OI+top-trader (cache 5m) · C orderbook (cache 30dtk).
-                    # Kompas BUKAN gate: gagal fetch = field None, bos tetap ditanya.
-                    try:
-                        brief['moneyFlowReal']=mf.read_all(sym, kk, int(time.time()*1000))
-                        log({'event':'mf_read','symbol':sym,'side':side,
-                             'dom':(brief.get('moneyFlowReal') or {}).get('dominance')})
-                    except Exception as _mfe:
-                        log({'event':'mf_err','symbol':sym,'msg':str(_mfe)[:80]})
                     # P14 TRADFI GATE: blok entry 3 jam sebelum break/close (anti volume kopong)
                     if sym in tfs.TRADFI:
                         _eb,_ff,_why=tfs.tradfi_window()
                         if _eb:
                             log({'event':'skip_tradfi_window','symbol':sym,'side':side,'window':_why})
                             continue
-                    # v7.1.1 #1: dedup intra-batch — sinyal dobel (sym,side) di batch sama
-                    # cuma diambil SEKALI (bar terbaru = loop urut), hemat kuota jev.
-                    _ps=(sym,side)
-                    if _ps in pending_sides: continue
-                    pending_sides.add(_ps)
                     candidates.append({'sym':sym,'i':i,'side':side,'grade':grade,'key':key,'src':src,
                                        'brief':brief,'entry_next':float(kk[i+1][1]) if i+1<len(kk) else None,
                                        'regime':reg})
@@ -469,7 +415,7 @@ def _iterate_inner(once=False):
         st.setdefault('last_seen',{})[sym]=kk[-1][0]
     st['done']=_p39_trim(done)  # persist dedup (P39: trim by bar_ts, cap 2000)
     # 3) bos putuskan (batch, urut grade A dulu)
-    candidates.sort(key=lambda x:(x['grade'] not in ('A','A+'), x['sym']))  # A+/A dulu (v11.0)
+    candidates.sort(key=lambda x:(x['grade']!='A', x['sym']))
     confirmed=0
     # GATE HEMAT-API (user): posisi penuh 5/5 -> kurir DILARANG nanya bos LLM. Notif sekali per kejadian.
     if candidates and n_open>=og.MAX_GLOBAL_POSITIONS:
@@ -479,21 +425,6 @@ def _iterate_inner(once=False):
                  'n_open':n_open,'candidates':len(candidates)})   # user: cukup di logs, jangan spam TG
             st['full_warned']=True
     for cd in candidates:
-        # ===== v12.3 FRESH RE-CHECK: sinyal dievaluasi ulang di DATA LIVE sebelum nanya bos =====
-        # Audit 2 Okt: bar sinyal bisa basi saat eksekusi (trio 11:26 WIB nembak LONG di
-        # pucuk tersembunyi 82-89; BCH A+ tembak pas RSI live 61). P12-LIVE + A+ staleness
-        # = reinforcement rule lama di tick live; fade lemah = demote B (bos tetap ditanya).
-        _rc=hr.fresh_recheck(cd, k_cache, rb, px=live_px(cd['sym']))
-        if not _rc['ok']:
-            done.discard(cd['key'])  # gak dikunci — kondisi live bisa berubah, sinyal boleh dinilai ulang
-            st.setdefault('reject_cd',{})[cd['sym']+':'+cd['side']]=time.time()*1000+15*60*1000
-            log({'event':'recheck_block','symbol':cd['sym'],'side':cd['side'],'grade':cd['grade'],
-                 'rsi_now':_rc['rsi_now'],'k_now':_rc['k_now'],'why':_rc['why']})
-            continue
-        if _rc['demote']:
-            cd['grade']='B'
-            log({'event':'recheck_demote','symbol':cd['sym'],'side':cd['side'],
-                 'rsi_now':_rc['rsi_now'],'k_now':_rc['k_now'],'why':_rc['demote_why']})
         if n_open>=og.MAX_GLOBAL_POSITIONS:
             log({'event':'skip_full_position','symbol':cd['sym'],'side':cd['side'],'grade':cd['grade']})
             done.discard(cd['key'])  # jangan dikunci done — kalau slot buka lagi, sinyal bisa dinilai ulang
@@ -505,10 +436,8 @@ def _iterate_inner(once=False):
         # 'L' != 'LONG' bikin SL/TP kebalik (bug BCH 21:51 WIB: LONG kena SL palsu di profit)
         _side=cd['side']
         cd['side']={'L':'LONG','S':'SHORT'}.get(_side,_side)
-        _mtc=(cd.get('brief') or {}).get('metrics') or {}
         log({'event':'decision','symbol':cd['sym'],'side':cd['side'],'grade':cd['grade'],
              'decision':d.get('decision'),'conf':d.get('confidence'),
-             'rsi6rt':_mtc.get('rsi6Realtime'),'rsi_now':_rc.get('rsi_now'),'k_now':_rc.get('k_now'),
              'reason':d.get('reason'),'factor':d.get('key_factor')})
         # P39 FIX (ACC 30 Sep): reject_cd ditulis SEBELUM save_state — dulu ditulis
         # SETELAH save terakhir (535) & save berikutnya cuma terjadi saat CONFIRMED (695)
@@ -526,9 +455,23 @@ def _iterate_inner(once=False):
         # P30 REJECT-COOLDOWN: REJECT = jangan tanya bos utk (sym,side) yg sama dlm 15 menit — hemat API jev
         # (kasus P29: ATOM SHORT ditanya 40x/2jam = 44% budget jev terbuang utk jawaban sama)
         if d.get('decision')!='CONFIRMED': continue
-        # v7.1: Wick-flip P16-B DIMUSNAHKAN — keputusan arah bos mutlak (patch user:
-        # flip mekanis di eksekutor = penyebab lose tersembunyi). Gak ada intervensi
-        # arah lagi antara jawaban bos dan TradeExecutor.
+        # P16-B WICK-EXTREME FLIP (dipertahankan v7.0 — bukti ARB/NEAR): sinyal ACC searah wick
+        # ekstrem DIBALIK (fade climax sah). RSI6 realtime = metrics.rsi6Realtime (kontrak v7).
+        _r6rt=(cd.get('brief') or {}).get('metrics',{}).get('rsi6Realtime')
+        _flipped=False
+        try:
+            _r6f=float(_r6rt) if _r6rt is not None else None
+        except Exception: _r6f=None
+        _old_side=cd['side']
+        if _r6f is not None and _old_side=='LONG' and _r6f>90:
+            cd['side']='SHORT'; _flipped=True
+        elif _r6f is not None and _old_side=='SHORT' and _r6f<10:
+            cd['side']='LONG'; _flipped=True
+        if _flipped:
+            reason=(d.get('reason','') or '')+f' [WICK-FLIP: sinyal dibalik — RSI6 realtime {_r6f} ekstrem, arah lama searah wick]'
+            d['reason']=reason
+            log({'event':'wick_flip','symbol':cd['sym'],'rsi6':_r6f,
+                 'old_side':_old_side,'new_side':cd['side']})
         if n_open+confirmed>=og.MAX_GLOBAL_POSITIONS:
             log({'event':'skip_full','symbol':cd['sym']}); continue
         # P9 RESTRUKTURISASI: hitung entry/side/SL/TP SEBELUM cabang LIVE/dry.
@@ -549,56 +492,67 @@ def _iterate_inner(once=False):
         # P1 COOLDOWN di titik mutasi (dulu cuma dicek saat scan): anti re-entry 100 detik pasca-SL
         if int(time.time()*1000) < st.get('cooldown',{}).get(cd['sym'],0):
             log({'event':'skip_cooldown','symbol':cd['sym'],'msg':'cooldown aktif (re-check di mutasi)'}); continue
-        # CHOP SNIPER: regime masih dipakai maxhold + notif; SL/TP kini PURE ATR (v8.0)
+        # CHOP SNIPER: regime RANGE = TP cepat, hold pendek; TREND = RR panjang
         regime=cd.get('regime','RANGE')
+        tp_rr=TP_RR_CHOP if regime=='RANGE' else TP_RR_TREND
         sl_pct=SL_PCT
         # P11: BOS YANG MIKIRIN SL/TP (varian eksekusi dari jev) — guard tetap ketat:
         variant=str(d.get('variant','')).upper() if isinstance(d,dict) else ''
-        # === ERA BARU v8.0: PURE ATR ADAPTIVE SCALPER (directive user 1 Okt) ===
-        # Multiplier statis (0.5x/0.67x/1.0x dari SL_PCT) DIHAPUS — SL/TP mengikuti
-        # volatilitas riil koin via slSuggest (ATR14x1.5 MURNI tanpa clamp, v10.0; unit PERSEN
-        # -> fraksi, unit-fix P36 tetap berlaku). Varian bos = modifikasi agresivitas ruang ATR.
-        _ss={}
+        if variant=='TIGHT':   sl_pct, tp_rr = SL_PCT*0.67, 2.5   # momentum jelas: SL 0.8%, TP 1:2.5
+        elif variant=='WIDE':  sl_pct, tp_rr = SL_PCT*1.5, 4.0    # wick besar: SL 1.8%, TP 1:4 (di balik struktur)
+        # P32 ATR-SL (skill #1 vault — obat 1 SL = 6.6 win): SL mengikuti volatilitas riil.
+        # slSuggest dari market_snapshot (ATR14 x 1.5, clamp 0.8-2.4%). Bos tetap bisa override
+        # via varian WIDE/TIGHT; ATR hanya NAIK-in SL minimum kalau pasar ganas, dan:
+        _P32_ATR_SL=os.environ.get('P32_ATR_SL','1')=='1'
+        if _P32_ATR_SL:
+            try:
+                _ss=((cd.get('brief') or {}).get('slSuggest') or {})
+                _sug=float(_ss.get('sl_pct_suggest') or 0)
+                # P36 UNIT-FIX (bug WLD 29 Sep): sl_pct_suggest = PERSEN (0.8-2.4, dst dr
+                # market_snapshot), sl_pct internal = FRAKSI (0.012 = 1.2%). Dulu _sug
+                # langsung dipakai sbg fraksi -> 2.08 terbaca 208% -> SL -0.5586 / TP 4.82 absurs.
+                _sug_f=_sug/100.0
+                if _sug_f>sl_pct and variant!='TIGHT':
+                    sl_pct=_sug_f  # ATR lebih lebar dari pilihan bos -> ikut ATR (anti SL ketat di pasar wick)
+                tp_rr=max(tp_rr, 2.5)  # RR minimum dijaga
+                if _sug_f and abs(sl_pct-_sug_f)<1e-9 and variant in ('','NORMAL'):
+                    log({'event':'atr_sl','symbol':cd['sym'],'atr_suggest':_sug,
+                         'msg':'SL mengikuti ATR14x1.5 (P32)'})
+            except Exception: pass
+        # P19 RANGE-POSITION GUARD: SL yang jatuh DI DALAM range 6 jam (72 bar) gampang kena noise/wick.
+        # Kasus RUNE 25 Sep 08:01 WIB: LONG @0.6402, SL 1.2% = 0.6325 — cuma 0.06% di atas low range
+        # 0.6319 → wick ke low range aja cukup memotong (dan benar terjadi). Solusi: kalau level SL
+        # berada di dalam range → SL dipaksa WIDE (1.8%) sampai keluar dr tepi range. Best-effort.
         try:
-            _ss=(cd.get('brief') or {}).get('slSuggest') or {}
-            _atr_f = float(_ss.get('sl_pct_suggest') or 1.2) / 100.0  # Konversi persen ke fraksi
+            _kc=k_cache.get(cd['sym']) or []
+            if len(_kc)<73:
+                _hi=_lo=None
+            else:
+                _hi=max(float(b[2]) for b in _kc[-72:]); _lo=min(float(b[3]) for b in _kc[-72:])
+            if _hi>_lo:
+                _pos=(entry-_lo)/(_hi-_lo)
+                # SL efektif berada DI DALAM range = pasti bisa kena noise range biasa (kasus RUNE:
+                # SL 0.6325 > low 0.6319 — cukup wick ke low range untuk memotong).
+                _sl_in_range = entry*(1-SL_PCT) > _lo if side=='LONG' else entry*(1+SL_PCT) < _hi
+                if side=='LONG' and _sl_in_range and variant!='WIDE':
+                    sl_pct, tp_rr = SL_PCT*1.5, 4.0
+                    log({'event':'range_guard_wide','symbol':cd['sym'],'side':side,
+                         'pos_in_range':round(_pos,2),'range_hi':_hi,'range_lo':_lo,
+                         'msg':'LONG deket resistance 6-jam — SL di-WIDE-in'})
+                elif side=='SHORT' and entry*(1+SL_PCT) < _hi and variant!='WIDE':
+                    sl_pct, tp_rr = SL_PCT*1.5, 4.0
+                    log({'event':'range_guard_wide','symbol':cd['sym'],'side':side,
+                         'pos_in_range':round(_pos,2),'range_hi':_hi,'range_lo':_lo,
+                         'msg':'SHORT deket support 6-jam — SL di-WIDE-in'})
         except Exception:
-            _atr_f = 0.012  # Fallback 1.2% jika data kosong
-
-        # Varian Bos Jev bertugas memodifikasi agresivitas ruang ATR secara adaptif:
-        if variant == 'TIGHT':
-            # v11.0 PRE-EMPTIVE: potong ruang ATR 50% (dulu 25%) — entri sudah di pucuk/
-            # lembah absolut = koordinat harga terbaik, SL super tipis, rugi minimal.
-            sl_pct = _atr_f * 0.50
-            tp_rr = 2.5             # v11.0: RR 2.5 (dulu 2.0) — TP kilat linear
-        elif variant == 'WIDE':
-            sl_pct = _atr_f * 1.30  # Melebarkan ruang ATR sebesar 30% jika wick sedang mengamuk
-            tp_rr = 2.5
-        else:  # NORMAL atau Kosong
-            sl_pct = _atr_f         # Ikut 100% volatilitas riil ATR koin bersangkutan (PAS DAN ADIL)
-            tp_rr = 2.5             # Konsisten dengan target Scalp-Lock v7.3
-        # v12.4.2 FIX FLOOR (directive user 4 Okt): floor SL = 0.3% — "gw mau set SL di ganti ke 0.3 dong".
-        # (v12.4.1: 1.0% hanya ~1 hari). Tetap ditagih SETELAH ×mult; WIDE/ATR besar tetap > floor (max()).
-        sl_pct = max(sl_pct, 0.003)
-        try:
-            if _ss.get('sl_pct_suggest'):
-                _mult={'TIGHT':0.50,'WIDE':1.30}.get(variant,1.0)
-                log({'event':'atr_sl','symbol':cd['sym'],'atr_suggest':float(_ss.get('sl_pct_suggest')),
-                     'mult':_mult,'final_sl_pct':round(sl_pct*100,4),
-                     'msg':f'SL = ATR14x1.5 x{_mult} (v8.0 PURE ATR) · v12.3.2 floor 1.5% post-mult'})
-        except Exception: pass
-        # (P32 ATR-SL lama DIGABUNG ke blok v8.0 di atas — ATR kini basis utama SL,
-        # bukan widening-only; blok _sug_f>sl_pct DIHAPUS per directive v8.0.)
-        # (P19 range-guard DIHAPUS v9.0 per directive — SL murni ATR linear, tanpa intervensi range.)
-        # v9.0: P36 clamp statis DIHAPUS per directive — sl_pct murni 100% mengikuti
-        # kalkulasi Pure ATR (slSuggest) secara linear tanpa pembatas atas/bawah.
+            pass  # guard best-effort; kag gagal = perilaku lama
+        # NORMAL / tanpa varian = angka engine (SL_PCT & RR regime) — fallback selalu ada
+        # P36 SANITY GUARD: SL wajar 0.3%-3.0% dari harga entry — mematikan SELURUH kelas
+        # bug satuan (persen vs fraksi) dari sumber mana pun. SL negatif/absurd = posisi
+        # jalan TANPA tameng (kasus WLD 29 Sep: SL -208%). Clamp ini hanya menyentuh nilai
+        # patologis: semua jalur normal (TIGHT 0.8 / NORMAL 1.2 / WIDE 1.8 / ATR max 2.4) lolos utuh.
+        sl_pct=max(0.003,min(0.030,sl_pct))
         sl_d=entry*sl_pct; tp_d=sl_d*tp_rr  # SL % dari harga (proporsional semua coin)
-        # v12.0 TP BAND SCALPER (directive user verbatim): TP dipaksa masuk band 0.6–1.5%
-        # — kontrak harga CASH scalper, diterapkan SETELAH TP dihitung ATR (SL gak disentuh,
-        # tetap ATR murni per kontrak "tanpa pembatasan" v10.0). Terdekat yang dulu kena = target.
-        tp_pct=tp_d/entry if entry else 0.0
-        if tp_pct<0.006: tp_d=entry*0.006
-        elif tp_pct>0.015: tp_d=entry*0.015
         sl=entry-sl_d if side=='LONG' else entry+sl_d
         tp=entry+tp_d if side=='LONG' else entry-tp_d
         if LIVE:
@@ -620,8 +574,6 @@ def _iterate_inner(once=False):
                 tg.send(tg.fmt_open({'symbol':cd['sym'],'side':side,'grade':cd['grade'],
                              'entry':entry,'sl':sl,'tp':tp,'tp_rr':tp_rr,'qty':qty,
                              'conf':d.get('confidence'),'reason':reason,
-                             'engine':cd.get('src'),
-                             'moneyFlowReal':(cd.get('brief') or {}).get('moneyFlowReal'),
                              'mf':(cd.get('brief') or {}).get('moneyFlow') or (cd.get('brief') or {}).get('tradfiMoneyFlow'),
                              'mss':(cd.get('brief') or {}).get('mss'),
                              'fvg':(cd.get('brief') or {}).get('fvgStatus'),
@@ -642,17 +594,14 @@ def _iterate_inner(once=False):
         _br=cd.get('brief') or {}
         tg.send(tg.fmt_open({'symbol':cd['sym'],'side':side,'grade':cd['grade'],
                              'entry':entry,'sl':sl,'tp':tp,'tp_rr':tp_rr,
-                             'qty':round((MARGIN*100*LEV)/entry,6),   # v7.1.1 #2: notional dinamis MARGIN*LEV (dulu hardcode 20.0)
+                             'qty':round(20.0/entry,6),
                              'conf':d.get('confidence'),'reason':reason,
                              'variant':str(d.get('variant','')).upper(),
-                             'engine':cd.get('src'),
-                             'moneyFlowReal':_br.get('moneyFlowReal'),
                              'mf':_br.get('moneyFlow') or _br.get('tradfiMoneyFlow'),
                              'mss':_br.get('mss'),
                              'fvg':_br.get('fvgStatus'),
                              'regime':regime,'rsi6':_br.get('metrics',{}).get('rsi6Realtime'),
                              'entryLoc':_br.get('entryLoc'),
-                             'godmode':_br.get('godmode'),
                              'n_open':len(st['open']),'saldo':st.get('saldo',0)}))
         # save PER EVENT: kalau proses kena kill saat LLM error bertubi, keputusan gak ilang & gak diulang
         save_state(st)

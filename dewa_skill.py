@@ -88,30 +88,6 @@ def build_payload_v7(sym, kk, side, grade, src, regime, funding, htf_maps):
     body=min(o[i],c[i])-l[i]; body2=h[i]-max(o[i],c[i])
     wick_lo=round(body/rng*100,1) if rng>0 else 0.0
     wick_hi=round(body2/rng*100,1) if rng>0 else 0.0
-    # ===== v12.0 ANTI-FAKEOUT LENS (matematika host, bukan opini LLM) =====
-    # candleAna: arah/kekuatan body; closePos: posisi close dlm range (0=di low,100=di high,
-    # |closePos-50| kecil = close tengah = SINYAL LELEH/ragu); consec: bar searah beruntun
-    # ( exhaustion ); retrace: seberapa jauh harga sudah mundur dr ekstrem 20-bar
-    # (wick-balik = entry fakeout); bbTouch: nempel BB20 2-sd (pucuk/lembah statistik).
-    candleAna=round((c[i]-o[i])/rng*100,1) if rng>0 else 0.0
-    closePos=round((c[i]-l[i])/rng*100,1) if rng>0 else 50.0
-    consec=0; j2=i
-    if c[i]>o[i]:
-        while j2>0 and c[j2]>o[j2]: consec+=1; j2-=1
-    elif c[i]<o[i]:
-        while j2>0 and c[j2]<o[j2]: consec+=1; j2-=1
-    if side=='SHORT':
-        hi20=max(h[max(0,i-19):i+1])
-        retrace=round((hi20-c[i])/c[i]*100,3) if hi20 else 0.0
-    else:
-        lo20=min(l[max(0,i-19):i+1])
-        retrace=round((c[i]-lo20)/c[i]*100,3) if lo20 else 0.0
-    if i>=19:
-        seg=c[i-19:i+1]; m20=sum(seg)/20
-        s20=(sum((x-m20)**2 for x in seg)/20)**0.5
-        bbTouch='UPPER' if c[i]>m20+2*s20 else ('LOWER' if c[i]<m20-2*s20 else 'NONE')
-    else:
-        bbTouch='NONE'
     # HTF alignment dari maps (15m cross + struktur 1h)
     ts=kk[i][0]
     m15=htf_maps.get('15m',{}).get(ts)
@@ -156,11 +132,6 @@ def build_payload_v7(sym, kk, side, grade, src, regime, funding, htf_maps):
             "rsi6": round(r6,1) if r6 is not None else None,
             "rsi6_spark": sp,
             "freshnessMinutes": 0,
-            # v7.1 ANTI-CHASE (di-upgrade dewa_live dari entryLoc host):
-            # CHASE/atrDistance>3.0 -> bos WAJIB REJECT + WAIT_FOR_RETRACE_TO_FVG (P5 guard).
-            "entryStatus": None, "atrDistance": None, "swingAgeBars": None,
-            "candleAna": candleAna, "closePos": closePos, "consec": consec,
-            "retracePct": retrace, "bbTouch": bbTouch,  # v12.0 ANTI-FAKEOUT LENS
         },
         "context": {"funding": funding, "candle": {
             "ts": kk[i][0], "o": o[i], "h": h[i], "l": l[i], "c": c[i], "volx": round(volx,2)}},

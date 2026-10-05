@@ -19,16 +19,13 @@ def _wib_now():
 
 
 def _load_env(path=None):
-    """v7.1.1 #4: OVERRIDE PENUH (protokol P35, sama dgn dewa_live) — .env = sumber
-    kebenaran, selalu menang atas env warisan shell/PM2. setdefault lama bikin
-    env warisan (mis. dummy dari unit test) menang diam-diam."""
     path=path or os.path.join(os.path.dirname(os.path.abspath(__file__)),'.env')
     try:
         for line in open(path):
             line=line.strip()
             if line and not line.startswith('#') and '=' in line:
                 k,v=line.split('=',1)
-                os.environ[k.strip()]=v.strip()
+                os.environ.setdefault(k.strip(), v.strip())
     except Exception: pass
 _load_env()
 
@@ -165,14 +162,14 @@ def _regime_line():
 # ---------- START / STOP / RESTART ----------
 def fmt_start(saldo, n_open=0, maxpos=5, n_pair=41):
     r=_resume24()
-    return (f"🟢 <b>BOT START · TYPESAFE SNIPER v12.4 MATA UANG</b>" + NL + DIV
+    return (f"🟢 <b>BOT START · TYPESAFE SNIPER v7.0</b>" + NL + DIV
         + NL + f"🧾 Mode      {_mode_line()}"
         + NL + _equity(saldo)
         + NL + "💵 Margin    $2.00/trade · notional $20.00"
         + NL + f"🎟️ Slot      {maxpos} · 1 posisi/pair · cd 30m"
         + NL + "🪙 Pair      41 (38 crypto + 3 logam + PAXG)"
-        + NL + "🎯 TP/SL     SL = ATR14x1.5 murni (×0.50/1.0/1.3 bos) · TP BAND 0.6–1.5% · floor 0.3% post-mult"
-        + NL + "🛡️ BE        TRAIL aktif: kunci +0.4% → puncak −0.2%"
+        + NL + "🎯 TP/SL     SL 0.3–0.6% (P7 bos, base 0.4%) · TP 2.5–4R · clamp 0.3–3%"
+        + NL + "🛡️ BE        TRAIL aktif: kunci +0.6% → puncak −0.3%"
         + NL + _tradfi_line()
         + NL + _bos_line()
         + NL + "🖥️ UI        log ringkas")
@@ -207,19 +204,16 @@ def fmt_open(e):
         if e.get('mss') and e['mss']!='NONE': parts.append("MSS "+str(e['mss']).replace('MSS_','').replace('_',' '))
         if e.get('fvg') and e['fvg']!='NONE': parts.append(f"FVG {e['fvg']}")
         if parts: smc=NL+' · '.join(parts)
-    # v10.1.1: label pipeline era lama DIMUSNAHKAN — visual entry kini alur analisa v10.1
-    # (PURE ATR + SUPER MONEY FLOW + MSS + FVG); faktual dari sinyal, bukan LLM.
+    # P21b: baris pipeline P1-P8 (faktual dari sinyal, bukan LLM)
     try:
+        _r6=e.get('rsi6')
+        _p5=''
+        if isinstance(_r6,(int,float)): _p5=f" · P5 {'wick!' if (_r6>85 or _r6<15) else 'ok'}"
         _p3='MSS✅' if e.get('mss') and e.get('mss')!='NONE' else 'MSS—'
         _p4='FVG✅' if e.get('fvg') and e.get('fvg')!='NONE' else 'FVG—'
-        # v12.4 MATA UANG: verdict dari data REAL (taker+OI), fallback label legacy
-        _dom=(e.get('moneyFlowReal') or {}).get('dominance')
-        if _dom=='LONG_LEGIT': _mfl='MONEY FLOW REAL: LONG LEGIT ✓'
-        elif _dom=='SHORT_LEGIT': _mfl='MONEY FLOW REAL: SHORT LEGIT ✓'
-        elif _dom=='COVER_FADE_RISK': _mfl='MONEY FLOW REAL: COVERING ⚠️ (jebakan?)'
-        elif _dom=='PRESSURE_WEAK': _mfl='MONEY FLOW REAL: LEMAH —'
-        else: _mfl='SUPER MONEY FLOW ✓' if e.get('mf') else 'MONEY FLOW —'
-        smc+=NL+f"🧠 ANALISA · PURE ATR ✓ · {_mfl} · {_p3} · {_p4}"
+        _p2=(e.get('mf') or '').replace('🛰️ ','').split(' (')[0] or 'MF—'
+        _p7=e.get('conf')
+        smc+=NL+f"🧠 P1→P8 · P2 {_p2} · P3 {_p3} · P4 {_p4}{_p5} · P7 {_p7}"
     except Exception: pass
     r=_resume24()
     return ("🚀 <b>ENTRY</b> · "+e['symbol']+" · "+SIDE_ART.get(side,'')+f" <b>{side}</b>"
@@ -235,35 +229,12 @@ def fmt_open(e):
         + NL + _bos_line().replace('🤖 ','🤖 ')
         + NL + f"🧠  <i>{e.get('reason','')}</i>"
         + mom + loc38 + smc
-        + (NL + f"🎮 GODMODE: {e['godmode'].get('line')}"
-            + (f" · RSI6live {e.get('rsi6')}" if e.get('rsi6') is not None else "") if (e.get('godmode') or {}).get('line') else "")
-        + _mfr_line(e.get('moneyFlowReal'))
         + NL + DIV
         + NL + f"🎟️ Slot {e.get('n_open','?')}/5 · {_equity(e.get('saldo',0)).replace('💰 Ekuitas   ','💰 Ekuitas ')}"
         + NL + f"📊 Hari ini {r['w']}W/{r['l']}L · WR {_wr(r):.1f}% · Net {r['net']:+.2f}"
         + NL + "⏰ "+_wib_now())
 
 # ---------- TRAIL LOCK ----------
-def _mfr_line(mfr):
-    """v12.4 MATA UANG: 1 baris bukti aliran uang real di notif entry. Fail-open = baris gak muncul."""
-    try:
-        if not mfr: return ""
-        t=mfr.get('taker') or {}; oi=mfr.get('oi') or {}; tp=mfr.get('top') or {}; ob=mfr.get('ob') or {}
-        parts=[]
-        if t.get('taker_buy_ratio') is not None: parts.append(f"takerBuy {t['taker_buy_ratio']*100:.0f}%")
-        if oi.get('oi_usdt') is not None:
-            _o=f"OI {oi['oi_usdt']/1e6:.1f}M"
-            if oi.get('chg_15m_pct') is not None: _o+=f" ({oi['chg_15m_pct']:+.1f}%/15m"
-            if oi.get('chg_1h_pct') is not None: _o+=f", {oi['chg_1h_pct']:+.1f}%/1j"
-            if oi.get('chg_15m_pct') is not None: _o+=")"
-            parts.append(_o)
-        if tp.get('ls_top') is not None: parts.append(f"topL/S {tp['ls_top']}")
-        if ob.get('ob_imbalance') is not None:
-            parts.append(f"ob {ob['ob_imbalance']:.2f}"+(f" · sprd {ob['spread_bps']}bps" if ob.get('spread_bps') is not None else ""))
-        if not parts: return ""
-        return NL+f"💰 MATA UANG: {mfr.get('dominance') or 'N/A'} · "+" · ".join(parts)
-    except Exception:
-        return ""
 
 # ---------- CLOSED (gaya v15) ----------
 def fmt_exit(e, saldo, n_open=None):

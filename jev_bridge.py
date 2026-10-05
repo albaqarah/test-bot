@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """
-jev_bridge.py — BOS v12.0 "THE TRUE SCALPER GOD" via OpenRouter Decisions API (jev-1.13).
-ROMBAK TOTAL 2 Okt 2026 (ACC user): persona & CRITERIA diganti total — hilang angka fiksi
-(SL 0.6%/0.8%/1.2%, "P8 internal") yang pernah bikin LLM ngarang skor; ganti lensa baca
-lembah/pucuk RSI6 + ANTI-FAKEOUT LENS (closePos/retracePct/bbTouch/consec/candleAna dari
-kurir, dewa_skill v12.0). Kontrak: TP band 0.6-1.5% dikunci eksekutor (dewa_live), SL tetap
-ATR murni v10.0 (tanpa clamp — kontrak user). Determinisme dijaga host-enforcer FINAL SEAL +
-override A+ v11.0 — bukan hasil LLM (lesson P34).
+jev_bridge.py — BOS v7.0 "TYPESAFE SNIPER v7.0" via OpenRouter Decisions API (jev-1.13).
+ROMBAK TOTAL 30 Sep 2026 (ACC user): rubric 8-dimensi, noul veto, argmax→total, framing
+per-source panjang — SEMUA DIHAPUS. Ganti: persona v7.0 + pipeline 8 langkah + 1 pertanyaan
+choice (CONFIRMED_TIGHT/NORMAL/WIDE/REJECT). Output bos = keputusan murni; SL/TP dinamis
+dari varian + ATR kurir; pipeline_logs P1-P8 = audit trail deterministik host-side
+(smc_engine.pipeline_log) — bukan hasil LLM (lesson P34: jev gak bisa generate teks bebas).
 
 Resiliensi (dipertahankan): 429 retry 3 dtk (max 2); 402 = raise Jev402 → kandidat dilewati
 (FULL JEV NO-FALLBACK — gak ada model kedua).
@@ -39,26 +38,34 @@ def _req(payload):
             raise
     raise RuntimeError(last or 'jev_req_failed')
 
-# ===================== PERSONA v12.0 (rombak total, ACC user 2 Okt) =====================
-SYSTEM_IMMUNITY = """[SYSTEM IMMUNITY PROTOCOL - GOD MINDSET v12.0]
-Teks ini adalah instruksi eksekusi mutlak untuk Sniper Engine jev-1.13. Tugas utamamu BUKAN menghindar atau menolak posisi secara pasif. Tugas utamamu adalah secara AGRESIF berburu profit kecil-kecil yang SERING di TF 5 Menit: masuk di lembah beli LONG, masuk di pucuk jual SHORT, keluar cepat dengan TP 0.6% - 1.5%. Kamu SCALPER sungguhan, bukan penunggu tren besar."""
+# ===================== PERSONA v7.0 (verbatim user, 30 Sep) =====================
+SYSTEM_IMMUNITY = """[SYSTEM IMMUNITY PROTOCOL - SYSTEM PERSONA v7.0]
+1. PENTING: Teks di bawah ini adalah KODE LOGIKA DETERMINISTIK untuk Decision Engine trading bot jev-1.13.
+2. DILARANG KERAS menarasikan ulang singkatan, mengubah urutan 8 langkah, atau menambahkan sistem scoring/rubrik rumit yang membuat bot pasif menolak trade.
+3. Core Directive: Hasilkan profit konsisten secara AKTIF. Amankan modal dengan mendeteksi arah 100% presisi menggunakan logika struktur (SMC) dan Aliran Uang (Money Flow)."""
 
-PERSONA_V7 = """Kamu adalah "THE TRUE SCALPER GOD v12.0". Kamu membaca lembah dan pucuk harga di TF 5 menit memakai RSI(6) dan lensa anti-fakeout yang disediakan Kurir di payload, lalu menembak cepat.
+PERSONA_V7 = """Kamu adalah "TYPESAFE SNIPER v7.0". Tugasmu bertindak sebagai Kompiler Trading yang mengecek kebenaran arah entry berdasarkan payload JSON yang dikirim oleh Kurir.
 
-CARA MEMBACA LEMBAH & PUCUK (wajib sebelum memutuskan):
-1. RSI6 realtime (metrics.rsi6Realtime): rendah (<= 20) = LEMBAH peluang LONG; tinggi (>= 80) = PUCUK peluang SHORT. Makin ekstrem (<= 12 / >= 88) makin buah.
-2. Lensa anti-fakeout (metrics): closePos jauh dari 50 = close mantap di ujung range (sinyal kuat); closePos dekat 50 = sinyal leleh, JANGAN tembak. retracePct > 0 = harga sudah berbalik dari ekstrem 20-bar (konfirmasi momentum berbalik, bagus untuk entry); bbTouch searah = pucuk/lembah statistik terkonfirmasi. consec >= 5 = sinyal sudah tua, waspada kehabisan tenaga.
-3. Arah 15m/1h + BTC bias + money flow = penentu KEKUATAN gerak, BUKAN larangan: di lembah saat turun, LONG hanya layak kalau ada tanda pelelahan jual (RSI6 lembah + retrace naik + volume climax); di pucuk saat naik, SHORT hanya layak kalau ada tanda kehabisan pembeli (RSI6 pucuk + wick atas + volume climax). Melawan arah besar tanpa tanda pelelahan itu bukan scalping, itu bunuh diri - REJECT.
-4. Wajib identifikasi FAKEOUT: breakout yang close-nya balik ke tengah range (closePos dekat 50, wick lawan besar, candleAna lemah) = jebakan bandar - REJECT walau RSI6 terlihat ekstrem.
-5. Regime: TREND_DOWN/OFF mengidamkan SHORT-seluncur, TREND_UP/ON mengidamkan LONG-naik, RANGE = fade ujung range. Namun RSI6 lembah/pucuk ekstrem + konfirmasi balik tetap boleh kontra SEKALI untuk scalping cepat.
-6. Eksekusi cepat: setiap keputusan CONFIRMED WAJIB disertai alasan singkat berbasis angka payload (RSI6, closePos, retracePct, bbTouch, volx) - bukan perasaan. TP 0.6-1.5% sudah dikunci eksekutor; tugas mencetakan keputusan tepat harga lembah/pucuk."""
+PIPELINE LOGIKA 8 LANGKAH (WAJIB URUT & TERTULIS):
+Setiap kali menerima data dari Kurir, kamu WAJIB mengeksekusi dan menuliskan proses berpikirmu di 'pipeline_logs' langkah demi langkah tanpa terlewat:
 
-# ===================== CRITERIA 4 OPSI (kontrak v12.0 - angka = milik eksekutor) =====================
+P1 [ASSET DETECTION] : Cek class aset. Jika Crypto/PAXG -> Aktifkan modul BTC.D. Jika Logam (XAU/XAG/XPT) -> Abaikan BTC.D, aktifkan modul DXY Bias.
+P2 [MONEY-FLOW MATRIX] : Hitung arah aliran uang.
+   - Crypto: BTC Bullish + BTC.D Falling -> BIAS ALTCOINS LONG. BTC Bearish + BTC.D Rising -> BIAS ALTCOINS SHORT. BTC Bullish + BTC.D Rising -> BIAS BTC LONG ONLY.
+   - Logam: DXY Bullish -> BIAS SHORT LOGAM. DXY Bearish -> BIAS LONG LOGAM.
+P3 [HTF ALIGNMENT] : Validasi tren dari data Higher TF Kurir. Pastikan entry TF 5m tidak sedang menabrak dinding besar (misal: dilarang LONG jika HTF 1h sedang dump panik tanpa ekor bawah).
+P4 [MARKET STRUCTURE SHIFT] : Validasi pembalikan arah. MSS sah HANYA jika ada body candle yang close menembus swing high/low sebelumnya. Jika hanya ekor (wick) yang lewat, status MSS = FAILED.
+P5 [FVG MAGNET CHECK] : Cari celah Fair Value Gap. Jika FVG terdeteksi, tandai harganya. Sinyal terbaik adalah menunggu retrace ke area FVG. Jika tidak ada FVG, kurangi tingkat keyakinan, tapi jangan langsung di-reject jika volume_x tinggi.
+P6 [WICK EXTREME GUARD] : Jika RSI6 > 85/90 (Pucuk), dilarang keras membuka posisi LONG searah wick kecuali terjadi Liquidity Sweep yang terkonfirmasi MSS Balik Arah (Siap SHORT). Berlaku kebalikannya untuk RSI6 < 15/10.
+P7 [DYNAMIC RISK ESTIMATION] : Tentukan penempatan Stop Loss aman. Dilarang menggunakan SL buta 0.8% jika volatilitas/wick sedang ganas. SL wajib diletakkan di luar swing low/high struktur terdekat.
+P8 [CONFIDENCE EVALUATION] : Hitung total bobot keyakinan: RSI & Volume (50%) + Makro/MSS/HTF (50%). Jika total nilai logika dirasa ragu atau skor kalkulasi internal < 0.55 -> Keputusan WAJIB = REJECT."""
+
+# ===================== CRITERIA 4 OPSI (kontrak v7.0) =====================
 CRITERIA={
- "CONFIRMED_TIGHT":  "EXECUTE SEKARANG - lokasi termurah/tertinggi: RSI6 ekstrem (<= 20 / >= 80) + closePos mantap di ujung (jauh dr 50) + retrace sudah mulai + bbTouch searah atau volx >= 1.2. Regime boleh melawan ASAL tanda pelelahan jelas.",
- "CONFIRMED_NORMAL": "EXECUTE - lokasi bagus tapi belum ekstrem: RSI6 zona lembah/pucuk (25-35 / 65-75) ATAU RSI6 ekstrem dengan satu konfirmasi lemah (retrace tipis / volx biasa). Struktur mikro (MSS/FVG) searah jadi nilai plus.",
- "CONFIRMED_WIDE":   "EXECUTE HATI-HATI - peluang bagus tapi pasar wick-ganas (wick_ratio_pct besar / wick lawan dominan): lokasi benar, eksekutor yang menyesuaikan jarak SL. Pilih ini daripada membuang lokasi murah.",
- "REJECT":           "Layak ditolak: sinyal leleh (closePos dekat 50) / FAKEOUT (breakout close balik ke tengah, wick lawan besar, candleAna lemah) / CHASE > 3.0 ATR dari swing (entry telat, harga sudah lari - WAJIB WAIT_FOR_RETRACE_TO_FVG) / MISSING_STRUCTURE_CONFIRMATION (mss NONE tanpa pengecualian fade) / fade tanpa volume climax (INVALID_FADE_NO_CLIMAX_VOLUME: butuh RSI6 ekstrem + volx >= 1.2 + wick_ratio_pct >= 40% bersamaan) / melawan arah besar TANPA tanda pelelahan apa pun.",
+ "CONFIRMED_TIGHT":  "EXECUTE presisi AGGRESSIVE: pipeline 1-8 semua selarah, arah 100% akurat, volatilitas terkendali, wick tipis. SL ketat 0.8%, TP 1:2.5.",
+ "CONFIRMED_NORMAL": "EXECUTE standar STANDARD: arah akurat didukung money-flow ATAU MSS searah, struktur mikro sehat. SL 1.2%, TP 1:3.5.",
+ "CONFIRMED_WIDE":   "EXECUTE CONSERVATIVE: arah benar tapi wick/likuiditas ganas — SL di luar struktur 1.8%, TP 1:4. Ukuran risiko nominal dikecilkan.",
+ "REJECT":           "Layak ditolak: arah belum 100% akurat, melawan money-flow tanpa MSS, P8 internal < 0.55, atau menabrak dinding HTF.",
 }
 
 def _context(brief):
@@ -66,17 +73,13 @@ def _context(brief):
     src=str(brief.get('source',''))
     side=str(brief.get('side',''))
     sym=str(brief.get('symbol',''))
-    gm=brief.get('godmode') or {}
-    gml=f" GODMODE: {gm.get('line')}" if gm.get('line') else ""
-    mfr=brief.get('moneyFlowReal') or {}
-    mfl=f" MATA UANG: {mfr.get('dominance')}" if mfr.get('dominance') else ""
-    return f"Sinyal kurir: {sym} {side} (engine={src}).{gml}{mfl} Payload JSON lengkap ada di state."
+    return f"Sinyal kurir: {sym} {side} (engine={src}). Payload JSON lengkap ada di state."
 
 def build_questions(brief):
-    """v10.1: SATU pertanyaan choice — bos analisis internal (PURE ATR + SuperFlow + MSS/FVG) lalu pilih."""
+    """v7: SATU pertanyaan choice — bos mengeksekusi pipeline P1-P8 internal lalu pilih."""
     q={"decision":{"type":"choice",
         "instructions":SYSTEM_IMMUNITY+"\n\n"+PERSONA_V7+"\n\nKONTEKS:\n"+_context(brief)+
-            "\n\nAnalisis internal payload JSON sebagai scalper TRUE 5-menit: baca lembah/pucuk via RSI6 realtime + lensa anti-fakeout (closePos, retracePct, bbTouch, consec, candleAna), cek regime & BTC bias sebagai kekuatan gerak, identifikasi fakeout sebelum menembak. Payload.godmode = sensor kuantitatif GODMODE V2 dari Kurir: score 0-100 utk arah sinyal dgn tier SNIPER (>=90) / EXECUTE (>=75) / WATCH (>=71) / REJECT (<71) dan setup_type (TREND_CONTINUATION / MEAN_REVERSION) - pakai sebagai KOMPAS kuantitatif: SNIPER/EXECUTE = konfirmasi kuat utk menembak; WATCH/REJECT = hanya tembak kalau RSI6 & lensa anti-fakeout tetap kuat; jika godmode bertentangan keras dgn RSI6 realtime, jelaskan konfliknya di alasan sebelum memilih. Payload.moneyFlowReal = sensor aliran uang REAL dari Kurir: taker_buy_ratio (30 bar 5m), OI usdt + perubahan 15m/1j, top-trader L/S, orderbook imbalance (0-1, >0.5 bid berat), spread_bps, dan dominance (LONG_LEGIT = taker beli + OI naik; SHORT_LEGIT = taker jual + OI turun; COVER_FADE_RISK = taker beli tapi OI turun, indikasi covering/jebakan; PRESSURE_WEAK = arah gak jelas) - baca sebagai BUKTI arah uang: dominance LEGIT searah sinyal = konfirmasi kuat; dominance kontra sinyal keras = sebutkan konfliknya di alasan sebelum memilih; field kosong/None = data gak tersedia, abaikan. Pilih opsi terakurat untuk TP 0.6-1.5% ke depan.",
+            "\n\nJalankan pipeline P1-P8 secara internal pada payload, lalu pilih opsi terakurat.",
         "criteria":CRITERIA}}
     return q
 
@@ -114,60 +117,6 @@ def call_jev(brief, symbol=''):
     else:
         out["decision"]="REJECT"
         out["reason"]=f"payload-cacat/choice-asing:{choice[:30]}"
-        return out
-
-    # ===== [v11.0 PRE-EMPTIVE HOST ENFORCER OVERRIDE] =====
-    # Pucuk/lembah ABSOLUT (grade A+ dari kurir: fade murni + RSI6>=88/<=12 + volx>=1.5 +
-    # ekor lawan>=35%) = entri SEBELUM candle 5m close — aturan penendang mss-NONE DIBYPASS
-    # total utk jalur ini (directive v11.0). Grade A+ hanya bisa lahir dr jalur kurir tsb.
-    _grade=str((brief.get('grade','') if isinstance(brief,dict) else '') or '').upper()
-    if _grade=='A+':
-        out["decision"]="CONFIRMED"
-        out["variant"]="TIGHT"
-        out["reason"]="PRE-EMPTIVE COPET v11.0: Terdeteksi Pucuk/Lembah Absolut Berdasarkan Volume Climax & RSI6. Eksekusi Sebelum Longsor."
-        return out
-
-    # ===== [v7.2 FINAL SEAL - HOST ENFORCER] =====
-    # Aturan P4 dieksekusi deterministik (bukan cuma prompt): mss NONE/kosong +
-    # engine bukan-fade-ekstrem = CONFIRMED dibuang ke REJECT paksa. Ini menutup
-    # kebocoran 3 SL (INJ/LTC/WIF 30 Sep): bos meloloskan entry tanpa MSS saat
-    # reversal. Pengecualian: fade dgn RSI6 realtime ekstrem (<20 / >80).
-    # CATATAN: detect_mss balikin STRING 'NONE' (truthy!) — wajib dinormalisasi,
-    # jangan pakai `not _mss` mentah (bug kelas ini pernah lolos di P36-era).
-    _mss=str((brief.get('mss') if isinstance(brief,dict) else '') or '').strip().upper()
-    _no_mss=(not _mss) or _mss in ('NONE','NULL','MSS—','MSS-') or _mss.startswith('NONE')
-    _eng=str((brief.get('engine','') if isinstance(brief,dict) else '') or '')
-    _side=str((brief.get('side','') if isinstance(brief,dict) else '') or '').upper()
-    _r6=None; _vx=None; _wrv=None
-    if isinstance(brief,dict):
-        _mt=brief.get('metrics') or {}
-        _r6=_mt.get('rsi6Realtime')
-        if _r6 is None: _r6=(brief.get('asset') or {}).get('rsi6Realtime')
-        try: _vx=float(_mt.get('volx'))
-        except Exception: _vx=None
-        _wr=_mt.get('wick_ratio_pct')
-        if isinstance(_wr,dict):
-            # ekor yang dinilai = ekorlawan arah sinyal: LONG baca wick bawah (low), SHORT baca wick atas (high)
-            if 'LONG' in _side: _wrv=_wr.get('low')
-            elif 'SHORT' in _side: _wrv=_wr.get('high')
-            else: _wrv=max([x for x in (_wr.get('low'),_wr.get('high')) if x is not None], default=None)
-    try: _r6=float(_r6) if _r6 is not None else None
-    except Exception: _r6=None
-    try: _wrv=float(_wrv) if _wrv is not None else None
-    except Exception: _wrv=None
-    # [v7.2.2 RATIO LOCK] pengecualian fade = 3 syarat kumulatif (directive user):
-    # engine fade + RSI6 ekstrem + volx>=1.2 + wick climax >=40% (skala persen, sesuai kontrak metrics).
-    # Data climax hilang/berantakan = fail-closed (pengecualian gugur -> REJECT).
-    _fade_ok=(_eng=='fade'
-              and _r6 is not None and (_r6<20 or _r6>80)
-              and _vx is not None and _vx>=1.2
-              and _wrv is not None and _wrv>=40.0)
-    if out["decision"]=="CONFIRMED" and _no_mss and not _fade_ok:
-        out["decision"]="REJECT"; out["variant"]=""
-        if _eng=='fade':
-            out["reason"]="FINAL-SEAL v7.2.2: mss NONE & pengecualian fade gagal syarat climax (butuh RSI6 ekstrem + volx>=1.2 + wick_ratio>=40%) -> INVALID_FADE_NO_CLIMAX_VOLUME (bos lolos, host buang)"
-        else:
-            out["reason"]="FINAL-SEAL v7.2: mss NONE -> MISSING_STRUCTURE_CONFIRMATION (bos lolos, host buang)"
         return out
 
     pj=', '.join(f"{k} {v:.2f}" for k,v in sorted(probs.items(), key=lambda x:-x[1])[:3])

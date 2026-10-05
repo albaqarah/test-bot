@@ -52,24 +52,6 @@ def detect_mss(kk):
             i, px = sl[-1]
             if last_close < px:
                 mss = 'MSS_BEARISH'; level = px
-        # ===== [v7.2.1 ATR BARRIER - STRICT MSS PENETRATION] =====
-        # Penembusan secuil (INJ 3-tick / LTC ~0.3% 30 Sep: 'MSS✅' tapi makan SL pas
-        # market flip) = BUKAN MSS. WAJIB jarak di luar swing level >= 0.25*ATR14.
-        # Data ATR tak cukup = fail-closed -> NONE (searah FINAL SEAL v7.2).
-        def _atr14_bars(bars):
-            n_=len(bars)
-            if n_ < 15: return None
-            trs=[]
-            for j in range(1, n_):
-                hl=bars[j][1]-bars[j][2]
-                hc=abs(bars[j][1]-bars[j-1][3]); lc=abs(bars[j][2]-bars[j-1][3])
-                trs.append(max(hl,hc,lc))
-            return sum(trs[-14:])/14.0
-        if mss:
-            _atr=_atr14_bars([[b[0],b[1],b[2],b[3]] for b in kk])
-            _pen=abs(last_close-level) if level is not None else 0.0
-            if _atr is None or _pen < 0.25*_atr:
-                mss = 'NONE'; level = None   # MSS palsu / tak terbukti = NONE
         struct = 'BULLISH_Structure' if (sh and sl and sh[-1][1] >= sl[-1][1] and c[-1] > c[max(0, n - 12)]) else 'BEARISH_Structure'
         if mss:
             struct = mss.replace('MSS_', 'MSS_CONFIRMED_')
